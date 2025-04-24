@@ -4,11 +4,11 @@ const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/136477023387268302
 
 // Archivos para cachear inicialmente
 const urlsToCache = [
-  '/Patentes/',
-  '/Patentes/index.html',
-  '/Patentes/manifest.json',
-  '/Patentes/icons/icon-192x192.png',
-  '/Patentes/icons/icon-512x512.png'
+  '/Genera-imagen/',
+  '/Genera-imagen/index.html',
+  '/Genera-imagen/manifest.json',
+  '/Genera-imagen/icons/icon-192x192.png',
+  '/Genera-imagen/icons/icon-512x512.png'
 ];
 
 // Instalar el Service Worker
