@@ -2,7 +2,7 @@
   "name": "Generador de Patentes",
   "short_name": "Patentes",
   "description": "Aplicación para generar y descargar imágenes de patentes con notificaciones",
-  "start_url": "/Patentes/index.html",
+  "start_url": "/Genera-imagen/index.html",
   "display": "standalone",
   "background_color": "#f6f6f6",
   "theme_color": "#4CAF50",
