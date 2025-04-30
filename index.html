@@ -9,23 +9,14 @@
       font-family: Arial, sans-serif;
       background-color: #f6f6f6;
       text-align: center;
-      padding: 20px;
-      max-width: 800px;
-      margin: 0 auto;
+      padding: 50px;
     }
     input, button, select {
       margin: 10px;
-      padding: 8px;
-      max-width: 100%;
-      box-sizing: border-box;
-    }
-    input[type="text"], input[type="password"] {
-      width: 80%;
     }
     canvas {
       border: 1px solid #ccc;
       margin-top: 10px;
-      max-width: 100%;
     }
     .hidden {
       display: none;
@@ -37,56 +28,6 @@
     #historialTabla {
       margin: 20px auto;
       border-collapse: collapse;
-      width: 100%;
-      overflow-x: auto;
-      display: block;
-    }
-    .notification {
-      background-color: #4CAF50;
-      color: white;
-      padding: 10px;
-      margin: 10px 0;
-      border-radius: 5px;
-      display: none;
-    }
-    .error-notification {
-      background-color: #f44336;
-    }
-    #descargarBtn {
-      display: inline-block;
-      background-color: #4CAF50;
-      color: white;
-      padding: 10px 20px;
-      text-decoration: none;
-      border-radius: 4px;
-      margin-top: 10px;
-    }
-    .badge {
-      display: inline-block;
-      background-color: #ff5722;
-      color: white;
-      border-radius: 50%;
-      width: 20px;
-      height: 20px;
-      text-align: center;
-      line-height: 20px;
-      font-size: 12px;
-      margin-left: 5px;
-    }
-    #queueStatus {
-      font-size: 14px;
-      margin-top: 10px;
-      color: #666;
-    }
-    /* Estilos responsive para móviles */
-    @media screen and (max-width: 600px) {
-      body {
-        padding: 10px;
-      }
-      canvas {
-        width: 90%;
-        height: auto;
-      }
     }
   </style>
 </head>
@@ -103,163 +44,39 @@
     <p>Bienvenido, <span id="nombreUsuario"></span></p>
     <input type="text" id="texto" placeholder="Escribe aquí letras o número">
     <br>
-    Tamaño del texto: <strong id="tamanioTextoLabel">24</strong> px
+    Tamaño del texto: <strong id="tamanioTextoLabel">48</strong> px
     <br>
-    <input type="range" id="tamanioTexto" min="10" max="100" value="24">
+    <input type="range" id="tamanioTexto" min="10" max="200" value="48">
     <br>
     <button onclick="generarImagen()">Generar Imagen</button>
     <button onclick="revertirImagen()" id="revertirBtn" class="hidden">Revertir Imagen</button>
     <br>
-    <canvas id="canvas" width="200" height="100"></canvas>
+    <canvas id="canvas" width="2000" height="1000" style="width: 500px;"></canvas>
     <br>
     <a id="descargarBtn" download="patente.png" class="hidden">Descargar Imagen</a>
-    <div id="notificacion" class="notification">Notificación enviada a Discord</div>
-    <div id="errorNotificacion" class="notification error-notification">Error al enviar notificación</div>
-    <div id="queueStatus" class="hidden">
-      Notificaciones pendientes: <span id="queueCount">0</span>
-      <button id="sendQueueBtn" onclick="procesarColaMensajes(true)">Enviar ahora</button>
-    </div>
   </div>
 
   <div id="historial" class="hidden">
     <h2>Historial de impresiones</h2>
-    <div style="overflow-x: auto;">
-      <table id="historialTabla"></table>
-    </div>
+    <table id="historialTabla"></table>
   </div>
 
   <script>
-    // Service Worker para procesamiento en segundo plano
-    if ('serviceWorker' in navigator && 'SyncManager' in window) {
-      navigator.serviceWorker.register('sw.js')
-        .then(registration => {
-          console.log('Service Worker registrado correctamente:', registration);
-        })
-        .catch(error => {
-          console.error('Error al registrar el Service Worker:', error);
-        });
-    }
-
     const users = {
       "admin": "1234",
       "Freddy": "Fred",
-      "Milton": "Mork"  // Agrega más usuarios aquí
+      "Milton": "Mork"
     };
 
     let usuarioActual = null;
-    let historial = [];
+    const historial = [];
     let imagenGenerada = null;
-    let colaMensajes = [];
-    let revisandoCola = false;
-    
-    // URL del webhook de Discord - ASEGÚRATE DE QUE ESTO SEA CORRECTO
-    const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1364802693012521000/MBUF565wKk7lV_xJgy5e4JqNCOI-PYOCUm1E3VxuJt9DWQ8StrXVrQGK8IOmIa0tmfz9";
-
-    // Cargar datos al iniciar
-    window.onload = function() {
-      cargarHistorial();
-      cargarColaMensajes();
-      
-      // Verificar cola periódicamente incluso si no estás logueado
-      setInterval(verificarColaPendiente, 60000); // Cada minuto
-      
-      // Primera verificación después de 5 segundos
-      setTimeout(verificarColaPendiente, 5000);
-
-      // Verificar si hay usuario guardado
-      const usuarioGuardado = localStorage.getItem('usuarioActual');
-      if (usuarioGuardado) {
-        usuarioActual = usuarioGuardado;
-        document.getElementById('login').classList.add('hidden');
-        document.getElementById('app').classList.remove('hidden');
-        document.getElementById('nombreUsuario').textContent = usuarioActual;
-        if (usuarioActual === 'admin') {
-          document.getElementById('historial').classList.remove('hidden');
-          renderHistorial();
-        }
-      }
-    };
-    
-    // Verificar y procesar la cola de mensajes pendientes
-    function verificarColaPendiente() {
-      if (navigator.onLine && colaMensajes.length > 0) {
-        procesarColaMensajes(false);
-      }
-      actualizarEstadoCola();
-    }
-    
-    // Evento que se dispara cuando se recupera la conexión
-    window.addEventListener('online', function() {
-      mostrarNotificacion("Conexión recuperada");
-      verificarColaPendiente();
-    });
-    
-    // Evento que se dispara cuando se pierde la conexión
-    window.addEventListener('offline', function() {
-      mostrarError("Conexión perdida - Las notificaciones se guardarán");
-      actualizarEstadoCola();
-    });
-
-    // Función para cargar el historial desde localStorage
-    function cargarHistorial() {
-      try {
-        const historialGuardado = localStorage.getItem('historialPatentes');
-        if (historialGuardado) {
-          historial = JSON.parse(historialGuardado);
-        }
-      } catch (error) {
-        console.error("Error al cargar historial:", error);
-        historial = [];
-      }
-    }
-
-    // Función para cargar la cola de mensajes desde localStorage
-    function cargarColaMensajes() {
-      try {
-        const colaGuardada = localStorage.getItem('colaMensajesDiscord');
-        if (colaGuardada) {
-          colaMensajes = JSON.parse(colaGuardada);
-          actualizarEstadoCola();
-        }
-      } catch (error) {
-        console.error("Error al cargar cola de mensajes:", error);
-        colaMensajes = [];
-      }
-    }
-    
-    // Función para guardar la cola de mensajes en localStorage
-    function guardarColaMensajes() {
-      try {
-        localStorage.setItem('colaMensajesDiscord', JSON.stringify(colaMensajes));
-        actualizarEstadoCola();
-      } catch (error) {
-        console.error("Error al guardar cola de mensajes:", error);
-      }
-    }
-    
-    // Función para actualizar la visualización del estado de la cola
-    function actualizarEstadoCola() {
-      const queueStatus = document.getElementById('queueStatus');
-      const queueCount = document.getElementById('queueCount');
-      
-      if (queueStatus && queueCount) {
-        if (colaMensajes.length > 0) {
-          queueStatus.classList.remove('hidden');
-          queueCount.textContent = colaMensajes.length;
-        } else {
-          queueStatus.classList.add('hidden');
-        }
-      }
-    }
 
     function login() {
       const u = document.getElementById('user').value;
       const p = document.getElementById('pass').value;
       if (users[u] && users[u] === p) {
         usuarioActual = u;
-        // Guardar usuario en localStorage para mantener la sesión
-        localStorage.setItem('usuarioActual', usuarioActual);
-        
         document.getElementById('login').classList.add('hidden');
         document.getElementById('app').classList.remove('hidden');
         document.getElementById('nombreUsuario').textContent = usuarioActual;
@@ -268,12 +85,6 @@
           renderHistorial();
         } else {
           document.getElementById('historial').classList.add('hidden');
-        }
-        
-        // Verificar cola de mensajes al iniciar sesión
-        actualizarEstadoCola();
-        if (navigator.onLine && colaMensajes.length > 0) {
-          setTimeout(procesarColaMensajes, 2000);
         }
       } else {
         alert('Usuario o contraseña incorrectos');
@@ -286,102 +97,37 @@
 
     function generarImagen() {
       const texto = document.getElementById('texto').value;
-      if (!texto) {
-        alert("Por favor ingresa un texto para la patente");
-        return;
-      }
-      
       const tamanio = document.getElementById('tamanioTexto').value;
       const canvas = document.getElementById('canvas');
       const ctx = canvas.getContext('2d');
+
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.font = `${tamanio}px Arial`;
+      ctx.font = `${tamanio * 5}px Arial`;  // Escalamos tamaño al canvas HD
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillStyle = "black";
       ctx.fillText(texto, canvas.width / 2, canvas.height / 2);
 
-      imagenGenerada = canvas.toDataURL();  // Guardar imagen generada
+      imagenGenerada = canvas.toDataURL("image/png");
 
-      // Guardar en historial
       const ahora = new Date();
-      const nuevoRegistro = {
+      historial.push({
         usuario: usuarioActual,
         texto,
         fecha: ahora.toLocaleDateString(),
         hora: ahora.toLocaleTimeString()
-      };
-      
-      historial.push(nuevoRegistro);
-      
-      // Guardar en localStorage
-      try {
-        localStorage.setItem('historialPatentes', JSON.stringify(historial));
-      } catch (error) {
-        console.error("Error al guardar en localStorage:", error);
-      }
+      });
 
       if (usuarioActual === 'admin') renderHistorial();
 
-      // Habilitar descarga
       const enlace = document.getElementById('descargarBtn');
       enlace.classList.remove('hidden');
       enlace.textContent = "Descargar Imagen";
+      enlace.onclick = function () {
+        enlace.href = canvas.toDataURL("image/png");
+      };
 
-      // Configurar el enlace de descarga
-      configurarEnlaceDescarga();
-
-      // Mostrar botón de revertir
       document.getElementById('revertirBtn').classList.remove('hidden');
-    }
-
-    function configurarEnlaceDescarga() {
-      const enlace = document.getElementById('descargarBtn');
-      const canvas = document.getElementById('canvas');
-      
-      // Pre-cargar la URL para evitar problemas en móviles
-      const imagenURL = canvas.toDataURL();
-      enlace.href = imagenURL;
-      
-      // Limpiar cualquier evento previo para evitar duplicados
-      enlace.onclick = null;
-      
-      // Para móviles - usar un enfoque de dos pasos para la descarga
-      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-        // En móviles, dividimos la descarga y el envío de notificación
-        let notificacionEnviada = false;
-        
-        enlace.addEventListener('click', function(e) {
-          // Si ya enviamos notificación, solo descargamos
-          if (notificacionEnviada) {
-            return true;
-          }
-          
-          // Si es el primer clic, enviamos notificación pero prevenimos descarga
-          e.preventDefault();
-          const textoPatente = document.getElementById('texto').value;
-          enviarNotificacionDiscord(textoPatente);
-          notificacionEnviada = true;
-          
-          // Cambiamos el texto para indicar que ahora se descargará
-          this.textContent = "Tocar para descargar";
-          
-          return false;
-        });
-      } else {
-        // En computadoras, hacemos ambas cosas a la vez
-        enlace.addEventListener('click', function(e) {
-          // Actualizar URL antes de descargar
-          this.href = canvas.toDataURL();
-          
-          // Enviar notificación a Discord
-          const textoPatente = document.getElementById('texto').value;
-          enviarNotificacionDiscord(textoPatente);
-          
-          // Permitir que la descarga continúe normalmente
-          return true;
-        });
-      }
     }
 
     function revertirImagen() {
@@ -393,19 +139,13 @@
         img.src = imagenGenerada;
         img.onload = function () {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-          // Invertir la imagen en el eje horizontal (efecto espejo)
           ctx.save();
-          ctx.scale(-1, 1); // Escalar en eje X (-1 para invertir)
-          ctx.drawImage(img, -canvas.width, 0); // Dibujar la imagen invertida
+          ctx.scale(-1, 1);
+          ctx.drawImage(img, -canvas.width, 0);
           ctx.restore();
-          
-          // Actualizar el enlace de descarga después de cambiar la imagen
-          configurarEnlaceDescarga();
         };
       }
 
-      // Ocultar el botón de revertir
       document.getElementById('revertirBtn').classList.add('hidden');
     }
 
@@ -417,311 +157,6 @@
         tabla.innerHTML += fila;
       });
     }
-    
-    // Función para enviar notificación a Discord o ponerla en cola
-    function enviarNotificacionDiscord(textoPatente) {
-      // Usar el usuario actual o 'Anónimo' si no hay sesión iniciada
-      const usuario = usuarioActual || 'Anónimo';
-      
-      // Crear el mensaje para Discord - Formato simple para mayor compatibilidad
-      const mensaje = {
-        content: `¡Nueva patente descargada! Usuario: ${usuario}, Texto: ${textoPatente}, Fecha: ${new Date().toLocaleString()}`
-      };
-      
-      // Si no hay conexión, añadir a la cola
-      if (!navigator.onLine) {
-        agregarMensajeACola(mensaje);
-        mostrarNotificacion("Sin conexión. Notificación guardada para envío posterior.");
-        return;
-      }
-      
-      // Mostrar mensaje de "enviando..."
-      mostrarNotificacion("Enviando notificación...");
-      
-      // Intentar enviar usando Background Sync si está disponible
-      if ('serviceWorker' in navigator && 'SyncManager' in window && navigator.serviceWorker.controller) {
-        // Guardar mensaje en IndexedDB para que el service worker lo procese
-        saveMessageForSync(mensaje).then(() => {
-          // Registrar sincronización en segundo plano
-          return navigator.serviceWorker.ready
-            .then(registration => {
-              return registration.sync.register('discord-sync');
-            })
-            .then(() => {
-              mostrarNotificacion("Notificación programada para envío en segundo plano");
-            })
-            .catch(err => {
-              // Si falla la sincronización, enviar de forma normal
-              enviarNotificacionDirecta(mensaje);
-            });
-        }).catch(err => {
-          // Si falla el guardado, enviar de forma normal
-          enviarNotificacionDirecta(mensaje);
-        });
-      } else {
-        // Si no hay soporte para Background Sync, enviar de forma normal
-        enviarNotificacionDirecta(mensaje);
-      }
-    }
-    
-    // Función para guardar mensaje para sincronización en segundo plano
-    function saveMessageForSync(mensaje) {
-      return new Promise((resolve, reject) => {
-        // También agregamos a la cola local como respaldo
-        agregarMensajeACola(mensaje);
-        resolve();
-      });
-    }
-    
-    // Función para enviar notificación de forma directa
-    function enviarNotificacionDirecta(mensaje) {
-      // Para móviles, usamos un enfoque diferente
-      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-        enviarNotificacionMovil(mensaje);
-      } else {
-        // Para computadoras, usamos el enfoque normal
-        enviarNotificacionPC(mensaje);
-      }
-    }
-    
-    // Función para agregar un mensaje a la cola
-    function agregarMensajeACola(mensaje) {
-      colaMensajes.push({
-        mensaje: mensaje,
-        timestamp: new Date().getTime()
-      });
-      guardarColaMensajes();
-      actualizarEstadoCola();
-    }
-    
-    // Función para procesar la cola de mensajes
-    function procesarColaMensajes(manual = false) {
-      // Si ya estamos procesando o no hay mensajes, salir
-      if (revisandoCola || colaMensajes.length === 0) return;
-      
-      // Si no hay conexión, salir
-      if (!navigator.onLine) {
-        if (manual) {
-          mostrarError("No hay conexión a internet. Inténtalo más tarde.");
-        }
-        return;
-      }
-      
-      revisandoCola = true;
-      
-      if (manual) {
-        mostrarNotificacion("Enviando notificaciones pendientes...");
-      }
-      
-      // Tomar el primer mensaje de la cola
-      const item = colaMensajes[0];
-      
-      // Opciones para el envío
-      const opciones = {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(item.mensaje)
-      };
-      
-      // Intentar enviar el mensaje
-      fetch(DISCORD_WEBHOOK_URL, opciones)
-        .then(response => {
-          if (response.ok) {
-            // Si el envío fue exitoso, eliminar de la cola
-            colaMensajes.shift();
-            guardarColaMensajes();
-            
-            if (manual) {
-              mostrarNotificacion(`Notificación enviada (quedan ${colaMensajes.length})`);
-            }
-            
-            // Si hay más mensajes, procesar el siguiente después de una pausa
-            if (colaMensajes.length > 0) {
-              setTimeout(() => {
-                revisandoCola = false;
-                procesarColaMensajes(manual);
-              }, 1000); // Esperar 1 segundo entre envíos
-            } else {
-              revisandoCola = false;
-              if (manual) {
-                mostrarNotificacion("Todas las notificaciones pendientes enviadas");
-              }
-            }
-          } else {
-            // Si hubo un error, intentar con proxy
-            throw new Error("Error al enviar");
-          }
-        })
-        .catch(error => {
-          // Probar con proxy
-          const PROXY_URL = "https://corsproxy.io/?url=";
-          fetch(PROXY_URL + encodeURIComponent(DISCORD_WEBHOOK_URL), opciones)
-            .then(response => {
-              if (response.ok) {
-                // Si el envío fue exitoso, eliminar de la cola
-                colaMensajes.shift();
-                guardarColaMensajes();
-                
-                if (manual) {
-                  mostrarNotificacion(`Notificación enviada (quedan ${colaMensajes.length})`);
-                }
-              } else {
-                if (manual) {
-                  mostrarError("No se pudo enviar la notificación.");
-                }
-              }
-              
-              // Terminar el procesamiento actual
-              revisandoCola = false;
-              
-              // Si hay más mensajes, procesar el siguiente
-              if (colaMensajes.length > 0 && response.ok) {
-                setTimeout(() => procesarColaMensajes(manual), 1000);
-              }
-            })
-            .catch(error => {
-              revisandoCola = false;
-              if (manual) {
-                mostrarError("No se pudo enviar la notificación.");
-              }
-            });
-        });
-    }
-
-    function enviarNotificacionMovil(mensaje) {
-      // Primero intentamos enviar directamente
-      if (navigator.onLine) {
-        const opciones = {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(mensaje)
-        };
-        
-        fetch(DISCORD_WEBHOOK_URL, opciones)
-          .then(response => {
-            if (response.ok) {
-              mostrarNotificacion("¡Notificación enviada!");
-              return;
-            }
-            throw new Error("Falló el envío directo");
-          })
-          .catch(error => {
-            // Si falla, agregar a la cola
-            agregarMensajeACola(mensaje);
-            mostrarNotificacion("Notificación guardada para reintento.");
-          });
-      } else {
-        // Si no hay conexión, agregar a la cola
-        agregarMensajeACola(mensaje);
-        mostrarNotificacion("Sin conexión. Notificación guardada.");
-      }
-    }
-
-    function enviarNotificacionPC(mensaje) {
-      // Primero intentamos enviar directamente
-      if (navigator.onLine) {
-        const opciones = {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(mensaje)
-        };
-        
-        fetch(DISCORD_WEBHOOK_URL, opciones)
-          .then(response => {
-            if (response.ok) {
-              mostrarNotificacion("¡Notificación enviada!");
-              return;
-            }
-            throw new Error("Falló el envío directo");
-          })
-          .catch(error => {
-            // Intentamos con proxy
-            const PROXY_URL = "https://corsproxy.io/?url=";
-            fetch(PROXY_URL + encodeURIComponent(DISCORD_WEBHOOK_URL), opciones)
-              .then(response => {
-                if (response.ok) {
-                  mostrarNotificacion("¡Notificación enviada!");
-                  return;
-                }
-                throw new Error("Falló el envío con proxy");
-              })
-              .catch(error => {
-                // Si fallan ambos métodos, agregar a la cola
-                agregarMensajeACola(mensaje);
-                mostrarNotificacion("Notificación guardada para reintento.");
-              });
-          });
-      } else {
-        // Si no hay conexión, agregar a la cola
-        agregarMensajeACola(mensaje);
-        mostrarNotificacion("Sin conexión. Notificación guardada.");
-      }
-    }
-    
-    // Función para mostrar notificación en la interfaz
-    function mostrarNotificacion(mensaje) {
-      const notificacion = document.getElementById("notificacion");
-      if (notificacion) {
-        notificacion.textContent = mensaje;
-        notificacion.style.display = "block";
-        
-        // Ocultar la notificación de error si está visible
-        const errorNotificacion = document.getElementById("errorNotificacion");
-        if (errorNotificacion) {
-          errorNotificacion.style.display = "none";
-        }
-        
-        // Registrar en consola para depuración
-        console.log("Notificación: " + mensaje);
-        
-        // Ocultar después de 3 segundos
-        setTimeout(() => {
-          notificacion.style.display = "none";
-        }, 3000);
-      } else {
-        // Si no está el elemento en pantalla (página cerrada)
-        console.log("Notificación (silenciosa): " + mensaje);
-      }
-    }
-    
-    // Función para mostrar errores en la interfaz
-    function mostrarError(mensaje) {
-      const errorNotificacion = document.getElementById("errorNotificacion");
-      if (errorNotificacion) {
-        errorNotificacion.textContent = mensaje;
-        errorNotificacion.style.display = "block";
-        
-        // Ocultar la notificación normal si está visible
-        const notificacion = document.getElementById("notificacion");
-        if (notificacion) {
-          notificacion.style.display = "none";
-        }
-        
-        // Registrar en consola para depuración
-        console.error("Error: " + mensaje);
-        
-        // Ocultar después de 5 segundos
-        setTimeout(() => {
-          errorNotificacion.style.display = "none";
-        }, 5000);
-      } else {
-        // Si no está el elemento en pantalla (página cerrada)
-        console.error("Error (silencioso): " + mensaje);
-      }
-    }
-    
-    // Verificar cola periódicamente incluso si la página está en segundo plano
-    setInterval(function() {
-      if (document.visibilityState === 'hidden') {
-        verificarColaPendiente();
-      }
-    }, 300000); // Cada 5 minutos si la página está en segundo plano
   </script>
 </body>
 </html>
