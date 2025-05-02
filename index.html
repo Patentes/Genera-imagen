@@ -17,21 +17,9 @@
     canvas {
       border: 1px solid #ccc;
       margin-top: 10px;
-      width: 200px;     /* Tamaño visual fijo */
-      height: 100px;
     }
     .hidden {
       display: none;
-    }
-    #descargarBtn {
-      display: inline-block;
-      margin-top: 10px;
-      padding: 8px 16px;
-      background-color: #4CAF50;
-      color: white;
-      text-decoration: none;
-      border-radius: 5px;
-      font-weight: bold;
     }
     #historialTabla td, #historialTabla th {
       padding: 8px;
@@ -40,6 +28,19 @@
     #historialTabla {
       margin: 20px auto;
       border-collapse: collapse;
+    }
+    #descargarBtn {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 10px 20px;
+      background-color: #4CAF50;
+      color: white;
+      text-decoration: none;
+      border-radius: 5px;
+      font-weight: bold;
+    }
+    #descargarBtn:hover {
+      background-color: #45a049;
     }
   </style>
 </head>
@@ -63,7 +64,7 @@
     <button onclick="generarImagen()">Generar Imagen</button>
     <button onclick="revertirImagen()" id="revertirBtn" class="hidden">Revertir Imagen</button>
     <br>
-    <canvas id="canvas"></canvas>
+    <canvas id="canvas" width="600" height="300"></canvas>
     <br>
     <a id="descargarBtn" download="patente.png" class="hidden">Descargar Imagen</a>
   </div>
@@ -78,12 +79,13 @@
       "admin": "1234",
       "Freddy": "Fred",
       "Milton": "Mork",
-      "Vicente": "vice123"  // Usuario nuevo agregado correctamente
+      "Vicente": "vice123"
     };
 
     let usuarioActual = null;
     const historial = [];
     let imagenGenerada = null;
+    let textoActual = "";
 
     function login() {
       const u = document.getElementById('user').value;
@@ -111,26 +113,33 @@
     function generarImagen() {
       const texto = document.getElementById('texto').value;
       const tamanio = document.getElementById('tamanioTexto').value;
+      textoActual = texto;
 
-      // Alta resolución
       const canvas = document.getElementById('canvas');
       const ctx = canvas.getContext('2d');
-      const scale = window.devicePixelRatio || 2;
 
-      canvas.width = 200 * scale;
-      canvas.height = 100 * scale;
-      ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform
+      // Mejor calidad (escalado)
+      const scale = 3;
+      const width = canvas.width;
+      const height = canvas.height;
+
+      canvas.width = width * scale;
+      canvas.height = height * scale;
+      canvas.style.width = width + "px";
+      canvas.style.height = height + "px";
       ctx.scale(scale, scale);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+      // Dibujar texto
+      ctx.clearRect(0, 0, width, height);
       ctx.font = `${tamanio}px Arial`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillStyle = "black";
-      ctx.fillText(texto, canvas.width / scale / 2, canvas.height / scale / 2);
+      ctx.fillText(texto, width / 2, height / 2);
 
       imagenGenerada = canvas.toDataURL();
 
+      // Guardar en historial
       const ahora = new Date();
       historial.push({
         usuario: usuarioActual,
@@ -141,10 +150,30 @@
 
       if (usuarioActual === 'admin') renderHistorial();
 
+      // Mostrar botón de descargar
       const enlace = document.getElementById('descargarBtn');
       enlace.classList.remove('hidden');
       enlace.textContent = "Descargar Imagen";
-      enlace.href = imagenGenerada;
+
+      // Al hacer clic en descargar, enviar notificación a Discord
+      enlace.onclick = function () {
+        enlace.href = canvas.toDataURL();
+
+        const ahora = new Date();
+        const webhookUrl = "https://discord.com/api/webhooks/1364802693012521000/MBUF565wKk7lV_xJgy5e4JqNCOI-PYOCUm1E3VxuJt9DWQ8StrXVrQGK8IOmIa0tmfz9"; // 👉 REEMPLAZA CON TU WEBHOOK
+
+        const mensaje = {
+          content: `🖨️ Usuario **${usuarioActual}** descargó una imagen con el texto: **${textoActual}** a las ${ahora.toLocaleTimeString()}`
+        };
+
+        fetch(webhookUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(mensaje)
+        });
+      };
 
       document.getElementById('revertirBtn').classList.remove('hidden');
     }
