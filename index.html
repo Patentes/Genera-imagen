@@ -34,8 +34,8 @@
       padding: 5px;
       border: 1px solid #ddd;
     }
-    .hidden {
-      display: none;
+    #app, #historial {
+      display: none; /* Inicialmente ocultos */
     }
     #historialTabla td, #historialTabla th {
       padding: 8px;
@@ -85,6 +85,9 @@
       margin-top: 10px;
       color: #666;
     }
+    #revertirBtn {
+      display: none; /* Inicialmente oculto */
+    }
     /* Estilos responsive para móviles */
     @media screen and (max-width: 600px) {
       body {
@@ -98,14 +101,14 @@
   </style>
 </head>
 <body>
-  <div id="login">
+  <div id="loginPanel">
     <h2>Iniciar Sesión</h2>
     <input type="text" id="user" placeholder="Usuario"><br>
     <input type="password" id="pass" placeholder="Contraseña"><br>
     <button onclick="login()">Entrar</button>
   </div>
 
-  <div id="app" class="hidden">
+  <div id="app">
     <h1>Generador de Imagen para Impresión</h1>
     <p>Bienvenido, <span id="nombreUsuario"></span></p>
     <input type="text" id="texto" placeholder="Escribe aquí letras o número">
@@ -115,22 +118,22 @@
     <input type="range" id="tamanioTexto" min="10" max="100" value="24">
     <br>
     <button onclick="generarImagen()">Generar Imagen</button>
-    <button onclick="revertirImagen()" id="revertirBtn" class="hidden">Revertir Imagen</button>
+    <button onclick="revertirImagen()" id="revertirBtn">Revertir Imagen</button>
     <br>
     <div id="canvasContainer">
       <canvas id="canvas" width="200" height="100"></canvas>
     </div>
     <br>
-    <a id="descargarBtn" download="patente.png" class="hidden">Descargar Imagen</a>
+    <a id="descargarBtn" download="patente.png" style="display: none;">Descargar Imagen</a>
     <div id="notificacion" class="notification">Notificación enviada a Discord</div>
     <div id="errorNotificacion" class="notification error-notification">Error al enviar notificación</div>
-    <div id="queueStatus" class="hidden">
+    <div id="queueStatus" style="display: none;">
       Notificaciones pendientes: <span id="queueCount">0</span>
       <button id="sendQueueBtn" onclick="procesarColaMensajes(true)">Enviar ahora</button>
     </div>
   </div>
 
-  <div id="historial" class="hidden">
+  <div id="historial">
     <h2>Historial de impresiones</h2>
     <div style="overflow-x: auto;">
       <table id="historialTabla"></table>
@@ -165,6 +168,7 @@
     const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1364802693012521000/MBUF565wKk7lV_xJgy5e4JqNCOI-PYOCUm1E3VxuJt9DWQ8StrXVrQGK8IOmIa0tmfz9";
 
     window.onload = function() {
+      // Cargar datos (desde memoria)
       cargarHistorial();
       cargarColaMensajes();
       
@@ -178,60 +182,33 @@
       const canvas = document.getElementById('canvas');
       if (canvas) {
         canvas.style.backgroundColor = "#FFFFFF";
-        const ctx = canvas.getContext('2d', { alpha: false });
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-      }
-      
-      // Verificar si hay usuario guardado (usando múltiples métodos)
-      let usuarioGuardado = null;
-      
-      // Intento 1: localStorage
-      try {
-        usuarioGuardado = localStorage.getItem('usuarioActual');
-        console.log("Verificando localStorage:", usuarioGuardado);
-      } catch (e) {
-        console.warn("Error accediendo a localStorage:", e);
-      }
-      
-      // Intento 2: sessionStorage
-      if (!usuarioGuardado) {
         try {
-          usuarioGuardado = sessionStorage.getItem('usuarioActual');
-          console.log("Verificando sessionStorage:", usuarioGuardado);
+          const ctx = canvas.getContext('2d', { alpha: false });
+          ctx.fillStyle = "#FFFFFF";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
         } catch (e) {
-          console.warn("Error accediendo a sessionStorage:", e);
+          console.warn("No se pudo configurar el canvas: ", e);
         }
       }
       
-      // Intento 3: cookies
-      if (!usuarioGuardado) {
-        const cookies = document.cookie.split(';');
-        for (let i = 0; i < cookies.length; i++) {
-          const cookie = cookies[i].trim();
-          if (cookie.indexOf('usuarioActual=') === 0) {
-            usuarioGuardado = cookie.substring('usuarioActual='.length, cookie.length);
-            console.log("Verificando cookies:", usuarioGuardado);
-            break;
-          }
-        }
-      }
-      
-      if (usuarioGuardado && users[usuarioGuardado]) {
-        usuarioActual = usuarioGuardado;
-        document.getElementById('login').classList.add('hidden');
-        document.getElementById('app').classList.remove('hidden');
+      // Verificar si hay usuario guardado en memoria
+      if (memoriaUsuario && users[memoriaUsuario]) {
+        usuarioActual = memoriaUsuario;
+        // Usar style.display
+        document.getElementById('loginPanel').style.display = 'none';
+        document.getElementById('app').style.display = 'block';
         document.getElementById('nombreUsuario').textContent = usuarioActual;
+        
         if (usuarioActual === 'admin') {
-          document.getElementById('historial').classList.remove('hidden');
-          renderHistorial();
+          document.getElementById('historial').style.display = 'block';
+          try {
+            renderHistorial();
+          } catch (e) {
+            console.warn("Error al renderizar historial:", e);
+          }
+        } else {
+          document.getElementById('historial').style.display = 'none';
         }
-      } else {
-        console.log("No se encontró usuario o no es válido. Redirigiendo a login");
-        // Mostrar formulario de login
-        document.getElementById('login').classList.remove('hidden');
-        document.getElementById('app').classList.add('hidden');
-        document.getElementById('historial').classList.add('hidden');
       }
     };
     
@@ -255,108 +232,54 @@
       actualizarEstadoCola();
     });
 
-    // Función para cargar el historial desde localStorage
-    function cargarHistorial() {
-      try {
-        const historialGuardado = localStorage.getItem('historialPatentes');
-        if (historialGuardado) {
-          historial = JSON.parse(historialGuardado);
-          console.log("Historial cargado de localStorage");
-        }
-      } catch (error) {
-        console.error("Error al cargar historial desde localStorage:", error);
-        // Intentar con sessionStorage
-        try {
-          const historialSesion = sessionStorage.getItem('historialPatentes');
-          if (historialSesion) {
-            historial = JSON.parse(historialSesion);
-            console.log("Historial cargado de sessionStorage");
-          }
-        } catch (e) {
-          console.error("Error al cargar historial desde sessionStorage:", e);
-        }
-        historial = historial || [];
-      }
-    }
-
-    // Función para cargar la cola de mensajes desde localStorage
-    function cargarColaMensajes() {
-      try {
-        const colaGuardada = localStorage.getItem('colaMensajesDiscord');
-        if (colaGuardada) {
-          colaMensajes = JSON.parse(colaGuardada);
-          console.log("Cola de mensajes cargada de localStorage");
-          actualizarEstadoCola();
-        }
-      } catch (error) {
-        console.error("Error al cargar cola de mensajes desde localStorage:", error);
-        // Intentar con sessionStorage
-        try {
-          const colaSesion = sessionStorage.getItem('colaMensajesDiscord');
-          if (colaSesion) {
-            colaMensajes = JSON.parse(colaSesion);
-            console.log("Cola de mensajes cargada de sessionStorage");
-            actualizarEstadoCola();
-          }
-        } catch (e) {
-          console.error("Error al cargar cola de mensajes desde sessionStorage:", e);
-        }
-        colaMensajes = colaMensajes || [];
-      }
+    // Función para guardar la cola de mensajes
+    function guardarColaMensajes() {
+      // Almacenar solo en memoria para evitar errores
+      memoriaColaMensajes = colaMensajes;
+      actualizarEstadoCola();
     }
     
     // Función para guardar en historial
     function guardarHistorial(nuevoRegistro) {
       historial.push(nuevoRegistro);
       
-      // Intentar guardar en localStorage
-      try {
-        localStorage.setItem('historialPatentes', JSON.stringify(historial));
-        console.log("Historial guardado en localStorage");
-      } catch (error) {
-        console.error("Error al guardar en localStorage:", error);
-        // Intentar con sessionStorage
-        try {
-          sessionStorage.setItem('historialPatentes', JSON.stringify(historial));
-          console.log("Historial guardado en sessionStorage");
-        } catch (e) {
-          console.error("Error al guardar en sessionStorage:", e);
-        }
-      }
+      // Almacenar solo en memoria para evitar errores
+      memoriaHistorial = historial;
       
       if (usuarioActual === 'admin') renderHistorial();
     }
     
-    // Función para guardar la cola de mensajes
-    function guardarColaMensajes() {
-      try {
-        localStorage.setItem('colaMensajesDiscord', JSON.stringify(colaMensajes));
-        console.log("Cola guardada en localStorage");
-        actualizarEstadoCola();
-      } catch (error) {
-        console.error("Error al guardar cola en localStorage:", error);
-        // Intentar con sessionStorage
-        try {
-          sessionStorage.setItem('colaMensajesDiscord', JSON.stringify(colaMensajes));
-          console.log("Cola guardada en sessionStorage");
-          actualizarEstadoCola();
-        } catch (e) {
-          console.error("Error al guardar cola en sessionStorage:", e);
-        }
-      }
+    // Función para cargar el historial
+    function cargarHistorial() {
+      // Usar historial en memoria
+      historial = memoriaHistorial || [];
+    }
+
+    // Función para cargar la cola de mensajes
+    function cargarColaMensajes() {
+      // Usar cola en memoria
+      colaMensajes = memoriaColaMensajes || [];
+      actualizarEstadoCola();
     }
     
-    // Función para actualizar la visualización del estado de la cola
+    // Variables para almacenamiento en memoria (no persistente)
+    let memoriaUsuario = null;
+    let memoriaHistorial = [];
+    let memoriaColaMensajes = [];
+    
+    // Deshabilitar completamente el almacenamiento persistente para evitar errores
+    const USE_ONLY_MEMORY_STORAGE = true;
+    
     function actualizarEstadoCola() {
       const queueStatus = document.getElementById('queueStatus');
       const queueCount = document.getElementById('queueCount');
       
       if (queueStatus && queueCount) {
         if (colaMensajes.length > 0) {
-          queueStatus.classList.remove('hidden');
+          queueStatus.style.display = 'block';
           queueCount.textContent = colaMensajes.length;
         } else {
-          queueStatus.classList.add('hidden');
+          queueStatus.style.display = 'none';
         }
       }
     }
@@ -373,39 +296,24 @@
       if (users[u] && users[u] === p) {
         usuarioActual = u;
         
-        try {
-          // Guardar usuario en localStorage para mantener la sesión
-          localStorage.setItem('usuarioActual', usuarioActual);
-          console.log("Usuario guardado en localStorage:", usuarioActual);
-        } catch (error) {
-          console.error("Error al guardar usuario en localStorage:", error);
-          // Si falla localStorage, intentar con sessionStorage
-          try {
-            sessionStorage.setItem('usuarioActual', usuarioActual);
-            console.log("Usuario guardado en sessionStorage:", usuarioActual);
-          } catch (e) {
-            console.error("Error al guardar en sessionStorage:", e);
-          }
-        }
+        // Guardar usuario solo en memoria
+        memoriaUsuario = usuarioActual;
         
-        // Definir una cookie como respaldo
-        document.cookie = "usuarioActual=" + usuarioActual + "; path=/; max-age=86400"; // 24 horas
-        
-        document.getElementById('login').classList.add('hidden');
-        document.getElementById('app').classList.remove('hidden');
+        // Mostrar/ocultar elementos usando style.display
+        document.getElementById('loginPanel').style.display = 'none';
+        document.getElementById('app').style.display = 'block';
         document.getElementById('nombreUsuario').textContent = usuarioActual;
         
         if (usuarioActual === 'admin') {
-          document.getElementById('historial').classList.remove('hidden');
+          document.getElementById('historial').style.display = 'block';
           renderHistorial();
         } else {
-          document.getElementById('historial').classList.add('hidden');
+          document.getElementById('historial').style.display = 'none';
         }
         
         // Verificar cola de mensajes al iniciar sesión
         actualizarEstadoCola();
         if (navigator.onLine && colaMensajes.length > 0) {
-          // Envío inmediato sin delay
           procesarColaMensajes(true);
         }
       } else {
@@ -480,14 +388,14 @@
 
       // Habilitar descarga
       const enlace = document.getElementById('descargarBtn');
-      enlace.classList.remove('hidden');
+      enlace.style.display = 'inline-block';
       enlace.textContent = "Descargar Imagen";
 
       // Configurar el enlace de descarga
       configurarEnlaceDescarga();
 
       // Mostrar botón de revertir
-      document.getElementById('revertirBtn').classList.remove('hidden');
+      document.getElementById('revertirBtn').style.display = 'inline-block';
     }
 
     function configurarEnlaceDescarga() {
