@@ -9,14 +9,30 @@
       font-family: Arial, sans-serif;
       background-color: #f6f6f6;
       text-align: center;
-      padding: 50px;
+      padding: 20px;
+      max-width: 800px;
+      margin: 0 auto;
     }
     input, button, select {
       margin: 10px;
+      padding: 8px;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    input[type="text"], input[type="password"] {
+      width: 80%;
     }
     canvas {
       border: 1px solid #ccc;
       margin-top: 10px;
+      max-width: 100%;
+      background-color: #FFFFFF !important; /* Fondo blanco puro para el canvas */
+    }
+    #canvasContainer {
+      background-color: #FFFFFF;
+      display: inline-block;
+      padding: 5px;
+      border: 1px solid #ddd;
     }
     .hidden {
       display: none;
@@ -28,19 +44,56 @@
     #historialTabla {
       margin: 20px auto;
       border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+    }
+    .notification {
+      background-color: #4CAF50;
+      color: white;
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 5px;
+      display: none;
+    }
+    .error-notification {
+      background-color: #f44336;
     }
     #descargarBtn {
       display: inline-block;
-      margin-top: 10px;
-      padding: 10px 20px;
       background-color: #4CAF50;
       color: white;
+      padding: 10px 20px;
       text-decoration: none;
-      border-radius: 5px;
-      font-weight: bold;
+      border-radius: 4px;
+      margin-top: 10px;
     }
-    #descargarBtn:hover {
-      background-color: #45a049;
+    .badge {
+      display: inline-block;
+      background-color: #ff5722;
+      color: white;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      text-align: center;
+      line-height: 20px;
+      font-size: 12px;
+      margin-left: 5px;
+    }
+    #queueStatus {
+      font-size: 14px;
+      margin-top: 10px;
+      color: #666;
+    }
+    /* Estilos responsive para móviles */
+    @media screen and (max-width: 600px) {
+      body {
+        padding: 10px;
+      }
+      canvas {
+        width: 90%;
+        height: auto;
+      }
     }
   </style>
 </head>
@@ -64,34 +117,166 @@
     <button onclick="generarImagen()">Generar Imagen</button>
     <button onclick="revertirImagen()" id="revertirBtn" class="hidden">Revertir Imagen</button>
     <br>
-    <canvas id="canvas" width="600" height="300"></canvas>
+    <div id="canvasContainer">
+      <canvas id="canvas" width="200" height="100"></canvas>
+    </div>
     <br>
     <a id="descargarBtn" download="patente.png" class="hidden">Descargar Imagen</a>
+    <div id="notificacion" class="notification">Notificación enviada a Discord</div>
+    <div id="errorNotificacion" class="notification error-notification">Error al enviar notificación</div>
+    <div id="queueStatus" class="hidden">
+      Notificaciones pendientes: <span id="queueCount">0</span>
+      <button id="sendQueueBtn" onclick="procesarColaMensajes(true)">Enviar ahora</button>
+    </div>
   </div>
 
   <div id="historial" class="hidden">
     <h2>Historial de impresiones</h2>
-    <table id="historialTabla"></table>
+    <div style="overflow-x: auto;">
+      <table id="historialTabla"></table>
+    </div>
   </div>
 
   <script>
+    // Service Worker para procesamiento en segundo plano
+    if ('serviceWorker' in navigator && 'SyncManager' in window) {
+      navigator.serviceWorker.register('sw.js')
+        .then(registration => {
+          console.log('Service Worker registrado correctamente:', registration);
+        })
+        .catch(error => {
+          console.error('Error al registrar el Service Worker:', error);
+        });
+    }
+
     const users = {
       "admin": "1234",
       "Freddy": "Fred",
-      "Milton": "Mork",
-      "Vicente": "vice123"
+      "Milton": "Mork"  // Agrega más usuarios aquí
     };
 
     let usuarioActual = null;
-    const historial = [];
+    let historial = [];
     let imagenGenerada = null;
-    let textoActual = "";
+    let colaMensajes = [];
+    let revisandoCola = false;
+    
+    // URL del webhook de Discord - ASEGÚRATE DE QUE ESTO SEA CORRECTO
+    const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1364802693012521000/MBUF565wKk7lV_xJgy5e4JqNCOI-PYOCUm1E3VxuJt9DWQ8StrXVrQGK8IOmIa0tmfz9";
+
+    window.onload = function() {
+      cargarHistorial();
+      cargarColaMensajes();
+      
+      // Verificar cola periódicamente incluso si no estás logueado
+      setInterval(verificarColaPendiente, 60000); // Cada minuto
+      
+      // Primera verificación después de 5 segundos
+      setTimeout(verificarColaPendiente, 5000);
+
+      // Configurar color de fondo del canvas al cargar
+      const canvas = document.getElementById('canvas');
+      if (canvas) {
+        canvas.style.backgroundColor = "#FFFFFF";
+        const ctx = canvas.getContext('2d', { alpha: false });
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      
+      // Verificar si hay usuario guardado
+      const usuarioGuardado = localStorage.getItem('usuarioActual');
+      if (usuarioGuardado) {
+        usuarioActual = usuarioGuardado;
+        document.getElementById('login').classList.add('hidden');
+        document.getElementById('app').classList.remove('hidden');
+        document.getElementById('nombreUsuario').textContent = usuarioActual;
+        if (usuarioActual === 'admin') {
+          document.getElementById('historial').classList.remove('hidden');
+          renderHistorial();
+        }
+      }
+    };
+    
+    // Verificar y procesar la cola de mensajes pendientes
+    function verificarColaPendiente() {
+      if (navigator.onLine && colaMensajes.length > 0) {
+        procesarColaMensajes(false);
+      }
+      actualizarEstadoCola();
+    }
+    
+    // Evento que se dispara cuando se recupera la conexión
+    window.addEventListener('online', function() {
+      mostrarNotificacion("Conexión recuperada");
+      verificarColaPendiente();
+    });
+    
+    // Evento que se dispara cuando se pierde la conexión
+    window.addEventListener('offline', function() {
+      mostrarError("Conexión perdida - Las notificaciones se guardarán");
+      actualizarEstadoCola();
+    });
+
+    // Función para cargar el historial desde localStorage
+    function cargarHistorial() {
+      try {
+        const historialGuardado = localStorage.getItem('historialPatentes');
+        if (historialGuardado) {
+          historial = JSON.parse(historialGuardado);
+        }
+      } catch (error) {
+        console.error("Error al cargar historial:", error);
+        historial = [];
+      }
+    }
+
+    // Función para cargar la cola de mensajes desde localStorage
+    function cargarColaMensajes() {
+      try {
+        const colaGuardada = localStorage.getItem('colaMensajesDiscord');
+        if (colaGuardada) {
+          colaMensajes = JSON.parse(colaGuardada);
+          actualizarEstadoCola();
+        }
+      } catch (error) {
+        console.error("Error al cargar cola de mensajes:", error);
+        colaMensajes = [];
+      }
+    }
+    
+    // Función para guardar la cola de mensajes en localStorage
+    function guardarColaMensajes() {
+      try {
+        localStorage.setItem('colaMensajesDiscord', JSON.stringify(colaMensajes));
+        actualizarEstadoCola();
+      } catch (error) {
+        console.error("Error al guardar cola de mensajes:", error);
+      }
+    }
+    
+    // Función para actualizar la visualización del estado de la cola
+    function actualizarEstadoCola() {
+      const queueStatus = document.getElementById('queueStatus');
+      const queueCount = document.getElementById('queueCount');
+      
+      if (queueStatus && queueCount) {
+        if (colaMensajes.length > 0) {
+          queueStatus.classList.remove('hidden');
+          queueCount.textContent = colaMensajes.length;
+        } else {
+          queueStatus.classList.add('hidden');
+        }
+      }
+    }
 
     function login() {
       const u = document.getElementById('user').value;
       const p = document.getElementById('pass').value;
       if (users[u] && users[u] === p) {
         usuarioActual = u;
+        // Guardar usuario en localStorage para mantener la sesión
+        localStorage.setItem('usuarioActual', usuarioActual);
+        
         document.getElementById('login').classList.add('hidden');
         document.getElementById('app').classList.remove('hidden');
         document.getElementById('nombreUsuario').textContent = usuarioActual;
@@ -100,6 +285,13 @@
           renderHistorial();
         } else {
           document.getElementById('historial').classList.add('hidden');
+        }
+        
+        // Verificar cola de mensajes al iniciar sesión
+        actualizarEstadoCola();
+        if (navigator.onLine && colaMensajes.length > 0) {
+          // Envío inmediato sin delay
+          procesarColaMensajes(true);
         }
       } else {
         alert('Usuario o contraseña incorrectos');
@@ -112,88 +304,179 @@
 
     function generarImagen() {
       const texto = document.getElementById('texto').value;
+      if (!texto) {
+        alert("Por favor ingresa un texto para la patente");
+        return;
+      }
+      
       const tamanio = document.getElementById('tamanioTexto').value;
-      textoActual = texto;
-
       const canvas = document.getElementById('canvas');
-      const ctx = canvas.getContext('2d');
-
-      // Mejor calidad (escalado)
-      const scale = 3;
-      const width = canvas.width;
-      const height = canvas.height;
-
-      canvas.width = width * scale;
-      canvas.height = height * scale;
-      canvas.style.width = width + "px";
-      canvas.style.height = height + "px";
-      ctx.scale(scale, scale);
-
-      // Dibujar texto
-      ctx.clearRect(0, 0, width, height);
-      ctx.font = `${tamanio}px Arial`;
+      
+      // Aumentar la resolución del canvas (factor 4x para mejor calidad)
+      const factorEscala = 4; // Mejor calidad
+      canvas.width = 200 * factorEscala;
+      canvas.height = 100 * factorEscala;
+      
+      // Mantener el tamaño visual en la página mediante CSS
+      canvas.style.width = "200px";
+      canvas.style.height = "100px";
+      
+      // Asegurar que el canvas tenga fondo blanco
+      canvas.style.backgroundColor = "#FFFFFF";
+      document.getElementById('canvasContainer').style.backgroundColor = "#FFFFFF";
+      
+      const ctx = canvas.getContext('2d', { alpha: false }); // Deshabilitar transparencia
+      
+      // Limpiar completamente el canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Primero dibujamos un fondo blanco puro para asegurar que no sea transparente
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Escalar el contexto para compensar el aumento de resolución
+      ctx.scale(factorEscala, factorEscala);
+      
+      // Ajuste para mejorar la nitidez de la fuente
+      ctx.font = ${tamanio}px Arial;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillStyle = "black";
-      ctx.fillText(texto, width / 2, height / 2);
+      ctx.fillStyle = "#000000"; // Negro puro para el texto
+      
+      // Asegurar que dibujamos en el centro correcto
+      ctx.fillText(texto, canvas.width / (2 * factorEscala), canvas.height / (2 * factorEscala));
+      
+      // Restaurar la escala para futuros dibujos
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-      imagenGenerada = canvas.toDataURL();
+      imagenGenerada = canvas.toDataURL('image/png', 1.0);  // Máxima calidad
 
       // Guardar en historial
       const ahora = new Date();
-      historial.push({
+      const nuevoRegistro = {
         usuario: usuarioActual,
         texto,
         fecha: ahora.toLocaleDateString(),
         hora: ahora.toLocaleTimeString()
-      });
+      };
+      
+      historial.push(nuevoRegistro);
+      
+      // Guardar en localStorage
+      try {
+        localStorage.setItem('historialPatentes', JSON.stringify(historial));
+      } catch (error) {
+        console.error("Error al guardar en localStorage:", error);
+      }
 
       if (usuarioActual === 'admin') renderHistorial();
 
-      // Mostrar botón de descargar
+      // Habilitar descarga
       const enlace = document.getElementById('descargarBtn');
       enlace.classList.remove('hidden');
       enlace.textContent = "Descargar Imagen";
 
-      // Al hacer clic en descargar, enviar notificación a Discord
-      enlace.onclick = function () {
-        enlace.href = canvas.toDataURL();
+      // Configurar el enlace de descarga
+      configurarEnlaceDescarga();
 
-        const ahora = new Date();
-        const webhookUrl = "https://discord.com/api/webhooks/1364802693012521000/MBUF565wKk7lV_xJgy5e4JqNCOI-PYOCUm1E3VxuJt9DWQ8StrXVrQGK8IOmIa0tmfz9"; // 👉 REEMPLAZA CON TU WEBHOOK
-
-        const mensaje = {
-          content: `🖨️ Usuario **${usuarioActual}** descargó una imagen con el texto: **${textoActual}** a las ${ahora.toLocaleTimeString()}`
-        };
-
-        fetch(webhookUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(mensaje)
-        });
-      };
-
+      // Mostrar botón de revertir
       document.getElementById('revertirBtn').classList.remove('hidden');
+    }
+
+    function configurarEnlaceDescarga() {
+      const enlace = document.getElementById('descargarBtn');
+      const canvas = document.getElementById('canvas');
+      
+      // Asegurar que la imagen tenga fondo blanco puro antes de generar la URL
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = canvas.width;
+      tempCanvas.height = canvas.height;
+      const tempCtx = tempCanvas.getContext('2d', { alpha: false }); // Deshabilitar transparencia
+      
+      // Dibujar fondo blanco puro
+      tempCtx.fillStyle = '#FFFFFF';
+      tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+      
+      // Dibujar la imagen del canvas original encima
+      tempCtx.drawImage(canvas, 0, 0);
+      
+      // Generar URL a partir del canvas temporal con fondo blanco puro
+      const imagenURL = tempCanvas.toDataURL('image/png', 1.0);
+      
+      // Pre-cargar una imagen para verificar que el fondo sea correcto
+      const img = new Image();
+      img.onload = function() {
+        const verifyCanvas = document.createElement('canvas');
+        verifyCanvas.width = img.width;
+        verifyCanvas.height = img.height;
+        const verifyCtx = verifyCanvas.getContext('2d');
+        verifyCtx.fillStyle = '#FFFFFF';
+        verifyCtx.fillRect(0, 0, verifyCanvas.width, verifyCanvas.height);
+        verifyCtx.drawImage(img, 0, 0);
+        
+        // Usar esta imagen verificada para la descarga
+        enlace.href = verifyCanvas.toDataURL('image/png', 1.0);
+      };
+      img.src = imagenURL;
+      
+      // Limpiar cualquier evento previo para evitar duplicados
+      enlace.onclick = null;
+      
+      // Para móviles - usar un enfoque más directo para la descarga
+      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+        // En móviles, simplificamos el proceso para que sea más inmediato
+        enlace.addEventListener('click', function() {
+          // Verificar URL antes de descargar
+          this.href = canvas.toDataURL('image/png', 1.0);
+          
+          // Enviar notificación inmediatamente
+          const textoPatente = document.getElementById('texto').value;
+          enviarNotificacionInmediata(textoPatente);
+          
+          return true;
+        });
+      } else {
+        // En computadoras, también hacemos el proceso inmediato
+        enlace.addEventListener('click', function() {
+          // Actualizar URL antes de descargar
+          this.href = canvas.toDataURL('image/png', 1.0);
+          
+          // Enviar notificación a Discord inmediatamente
+          const textoPatente = document.getElementById('texto').value;
+          enviarNotificacionInmediata(textoPatente);
+          
+          // Permitir que la descarga continúe normalmente
+          return true;
+        });
+      }
     }
 
     function revertirImagen() {
       const canvas = document.getElementById('canvas');
       const ctx = canvas.getContext('2d');
+      const factorEscala = 4; // Usar el mismo factor de escala que en generarImagen
 
       if (imagenGenerada) {
         const img = new Image();
         img.src = imagenGenerada;
         img.onload = function () {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          // Invertir la imagen en el eje horizontal (efecto espejo)
           ctx.save();
-          ctx.scale(-1, 1);
-          ctx.drawImage(img, -canvas.width, 0);
+          ctx.scale(-factorEscala, factorEscala); // Escalar con el factor y mantener la inversión
+          ctx.drawImage(img, -canvas.width/factorEscala, 0, canvas.width/factorEscala, canvas.height/factorEscala); // Ajustar para la escala
           ctx.restore();
+          
+          // Guardar la nueva versión invertida
+          imagenGenerada = canvas.toDataURL('image/png', 1.0);
+          
+          // Actualizar el enlace de descarga después de cambiar la imagen
+          configurarEnlaceDescarga();
         };
       }
 
+      // Ocultar el botón de revertir
       document.getElementById('revertirBtn').classList.add('hidden');
     }
 
@@ -201,11 +484,237 @@
       const tabla = document.getElementById('historialTabla');
       tabla.innerHTML = '<tr><th>Usuario</th><th>Texto</th><th>Fecha</th><th>Hora</th></tr>';
       historial.forEach(item => {
-        const fila = `<tr><td>${item.usuario}</td><td>${item.texto}</td><td>${item.fecha}</td><td>${item.hora}</td></tr>`;
+        const fila = <tr><td>${item.usuario}</td><td>${item.texto}</td><td>${item.fecha}</td><td>${item.hora}</td></tr>;
         tabla.innerHTML += fila;
       });
     }
+    
+    // Nueva función para envío inmediato de notificaciones
+    function enviarNotificacionInmediata(textoPatente) {
+      // Usar el usuario actual o 'Anónimo' si no hay sesión iniciada
+      const usuario = usuarioActual || 'Anónimo';
+      
+      // Crear el mensaje para Discord - Formato simple para mayor compatibilidad
+      const mensaje = {
+        content: ¡Nueva patente descargada! Usuario: ${usuario}, Texto: ${textoPatente}, Fecha: ${new Date().toLocaleString()}
+      };
+      
+      // Si no hay conexión, añadir a la cola
+      if (!navigator.onLine) {
+        agregarMensajeACola(mensaje);
+        mostrarNotificacion("Sin conexión. Notificación guardada para envío posterior.");
+        return;
+      }
+      
+      // Mostrar mensaje de "enviando..."
+      mostrarNotificacion("Enviando notificación...");
+      
+      // Enviar directamente sin delay
+      const opciones = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(mensaje)
+      };
+      
+      fetch(DISCORD_WEBHOOK_URL, opciones)
+        .then(response => {
+          if (response.ok) {
+            mostrarNotificacion("¡Notificación enviada correctamente!");
+            return;
+          }
+          throw new Error("Error al enviar notificación");
+        })
+        .catch(error => {
+          // Si falla, intentar con proxy sin delay
+          const PROXY_URL = "https://corsproxy.io/?url=";
+          fetch(PROXY_URL + encodeURIComponent(DISCORD_WEBHOOK_URL), opciones)
+            .then(response => {
+              if (response.ok) {
+                mostrarNotificacion("¡Notificación enviada correctamente!");
+                return;
+              }
+              throw new Error("Error al enviar notificación con proxy");
+            })
+            .catch(err => {
+              // Si ambos métodos fallan, agregar a la cola
+              agregarMensajeACola(mensaje);
+              mostrarNotificacion("No se pudo enviar la notificación ahora. Se intentará más tarde.");
+            });
+        });
+    }
+    
+    // Función para enviar notificación a Discord o ponerla en cola
+    function enviarNotificacionDiscord(textoPatente) {
+      // Esta función ahora simplemente redirige a la función de envío inmediato
+      enviarNotificacionInmediata(textoPatente);
+    }
+    
+    // Función para agregar un mensaje a la cola
+    function agregarMensajeACola(mensaje) {
+      colaMensajes.push({
+        mensaje: mensaje,
+        timestamp: new Date().getTime()
+      });
+      guardarColaMensajes();
+      actualizarEstadoCola();
+    }
+    
+    // Función para procesar la cola de mensajes
+    function procesarColaMensajes(manual = false) {
+      // Si ya estamos procesando o no hay mensajes, salir
+      if (revisandoCola || colaMensajes.length === 0) return;
+      
+      // Si no hay conexión, salir
+      if (!navigator.onLine) {
+        if (manual) {
+          mostrarError("No hay conexión a internet. Inténtalo más tarde.");
+        }
+        return;
+      }
+      
+      revisandoCola = true;
+      
+      if (manual) {
+        mostrarNotificacion("Enviando notificaciones pendientes...");
+      }
+      
+      // Tomar el primer mensaje de la cola
+      const item = colaMensajes[0];
+      
+      // Opciones para el envío
+      const opciones = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(item.mensaje)
+      };
+      
+      // Intentar enviar el mensaje
+      fetch(DISCORD_WEBHOOK_URL, opciones)
+        .then(response => {
+          if (response.ok) {
+            // Si el envío fue exitoso, eliminar de la cola
+            colaMensajes.shift();
+            guardarColaMensajes();
+            
+            if (manual) {
+              mostrarNotificacion(Notificación enviada (quedan ${colaMensajes.length}));
+            }
+            
+            // Si hay más mensajes, procesar el siguiente inmediatamente
+            if (colaMensajes.length > 0) {
+              revisandoCola = false;
+              procesarColaMensajes(manual);
+            } else {
+              revisandoCola = false;
+              if (manual) {
+                mostrarNotificacion("Todas las notificaciones pendientes enviadas");
+              }
+            }
+          } else {
+            // Si hubo un error, intentar con proxy
+            throw new Error("Error al enviar");
+          }
+        })
+        .catch(error => {
+          // Probar con proxy inmediatamente
+          const PROXY_URL = "https://corsproxy.io/?url=";
+          fetch(PROXY_URL + encodeURIComponent(DISCORD_WEBHOOK_URL), opciones)
+            .then(response => {
+              if (response.ok) {
+                // Si el envío fue exitoso, eliminar de la cola
+                colaMensajes.shift();
+                guardarColaMensajes();
+                
+                if (manual) {
+                  mostrarNotificacion(Notificación enviada (quedan ${colaMensajes.length}));
+                }
+              } else {
+                if (manual) {
+                  mostrarError("No se pudo enviar la notificación.");
+                }
+              }
+              
+              // Terminar el procesamiento actual
+              revisandoCola = false;
+              
+              // Si hay más mensajes, procesar el siguiente inmediatamente
+              if (colaMensajes.length > 0 && response.ok) {
+                procesarColaMensajes(manual);
+              }
+            })
+            .catch(error => {
+              revisandoCola = false;
+              if (manual) {
+                mostrarError("No se pudo enviar la notificación.");
+              }
+            });
+        });
+    }
+    
+    // Función para mostrar notificación en la interfaz
+    function mostrarNotificacion(mensaje) {
+      const notificacion = document.getElementById("notificacion");
+      if (notificacion) {
+        notificacion.textContent = mensaje;
+        notificacion.style.display = "block";
+        
+        // Ocultar la notificación de error si está visible
+        const errorNotificacion = document.getElementById("errorNotificacion");
+        if (errorNotificacion) {
+          errorNotificacion.style.display = "none";
+        }
+        
+        // Registrar en consola para depuración
+        console.log("Notificación: " + mensaje);
+        
+        // Ocultar después de 3 segundos
+        setTimeout(() => {
+          notificacion.style.display = "none";
+        }, 3000);
+      } else {
+        // Si no está el elemento en pantalla (página cerrada)
+        console.log("Notificación (silenciosa): " + mensaje);
+      }
+    }
+    
+    // Función para mostrar errores en la interfaz
+    function mostrarError(mensaje) {
+      const errorNotificacion = document.getElementById("errorNotificacion");
+      if (errorNotificacion) {
+        errorNotificacion.textContent = mensaje;
+        errorNotificacion.style.display = "block";
+        
+        // Ocultar la notificación normal si está visible
+        const notificacion = document.getElementById("notificacion");
+        if (notificacion) {
+          notificacion.style.display = "none";
+        }
+        
+        // Registrar en consola para depuración
+        console.error("Error: " + mensaje);
+        
+        // Ocultar después de 5 segundos
+        setTimeout(() => {
+          errorNotificacion.style.display = "none";
+        }, 5000);
+      } else {
+        // Si no está el elemento en pantalla (página cerrada)
+        console.error("Error (silencioso): " + mensaje);
+      }
+    }
+    
+    // Verificar cola periódicamente incluso si la página está en segundo plano
+    setInterval(function() {
+      if (document.visibilityState === 'hidden') {
+        verificarColaPendiente();
+      }
+    }, 300000); // Cada 5 minutos si la página está en segundo plano
   </script>
 </body>
 </html>
+
 
