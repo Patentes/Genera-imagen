@@ -338,7 +338,7 @@
       ctx.scale(factorEscala, factorEscala);
       
       // Ajuste para mejorar la nitidez de la fuente
-      ctx.font = ${tamanio}px Arial;
+      ctx.font = `${tamanio}px Arial`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillStyle = "#000000"; // Negro puro para el texto
@@ -484,7 +484,7 @@
       const tabla = document.getElementById('historialTabla');
       tabla.innerHTML = '<tr><th>Usuario</th><th>Texto</th><th>Fecha</th><th>Hora</th></tr>';
       historial.forEach(item => {
-        const fila = <tr><td>${item.usuario}</td><td>${item.texto}</td><td>${item.fecha}</td><td>${item.hora}</td></tr>;
+        const fila = `<tr><td>${item.usuario}</td><td>${item.texto}</td><td>${item.fecha}</td><td>${item.hora}</td></tr>`;
         tabla.innerHTML += fila;
       });
     }
@@ -496,7 +496,7 @@
       
       // Crear el mensaje para Discord - Formato simple para mayor compatibilidad
       const mensaje = {
-        content: ¡Nueva patente descargada! Usuario: ${usuario}, Texto: ${textoPatente}, Fecha: ${new Date().toLocaleString()}
+        content: `¡Nueva patente descargada! Usuario: ${usuario}, Texto: ${textoPatente}, Fecha: ${new Date().toLocaleString()}`
       };
       
       // Si no hay conexión, añadir a la cola
@@ -601,7 +601,7 @@
             guardarColaMensajes();
             
             if (manual) {
-              mostrarNotificacion(Notificación enviada (quedan ${colaMensajes.length}));
+              mostrarNotificacion(`Notificación enviada (quedan ${colaMensajes.length})`);
             }
             
             // Si hay más mensajes, procesar el siguiente inmediatamente
@@ -630,7 +630,7 @@
                 guardarColaMensajes();
                 
                 if (manual) {
-                  mostrarNotificacion(Notificación enviada (quedan ${colaMensajes.length}));
+                  mostrarNotificacion(`Notificación enviada (quedan ${colaMensajes.length})`);
                 }
               } else {
                 if (manual) {
