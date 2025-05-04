@@ -104,6 +104,27 @@
         height: auto;
       }
     }
+    #debugInfo {
+      margin-top: 20px;
+      text-align: left;
+      background-color: #f0f0f0;
+      padding: 10px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 12px;
+      max-height: 200px;
+      overflow-y: auto;
+      display: none;
+    }
+    #showDebugBtn {
+      margin-top: 10px;
+      background-color: #607d8b;
+      color: white;
+      border: none;
+      padding: 5px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -138,6 +159,9 @@
       Notificaciones pendientes: <span id="queueCount">0</span>
       <button id="sendQueueBtn" onclick="procesarColaMensajes(true)">Enviar ahora</button>
     </div>
+    
+    <button id="showDebugBtn" onclick="toggleDebugInfo()">Mostrar/Ocultar Información de Diagnóstico</button>
+    <div id="debugInfo"></div>
   </div>
 
   <div id="historial" class="hidden">
@@ -174,14 +198,22 @@
     // URL del webhook de Discord - ASEGÚRATE DE QUE ESTO SEA CORRECTO
     const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1364802693012521000/MBUF565wKk7lV_xJgy5e4JqNCOI-PYOCUm1E3VxuJt9DWQ8StrXVrQGK8IOmIa0tmfz9";
 
-    // Intentamos acceder directamente a la impresora del Q2i
-    let posImpresora = null;
-    let usoSimulacion = false;
+    // Variables para almacenar el resultado del diagnóstico
+    let printerMethods = {}; // Métodos de impresión disponibles
+    let globalObjects = []; // Objetos globales detectados
+    let androidObj = null; // Objeto Android específico
+    let printerObj = null; // Objeto de impresora detectado
+    let deviceInfo = {}; // Información del dispositivo
+    
+    // Detectar si estamos en un dispositivo Android
+    const isAndroid = /Android/i.test(navigator.userAgent);
 
     window.onload = function() {
       cargarHistorial();
       cargarColaMensajes();
-      detectarImpresora();
+      
+      // Ejecutar diagnóstico de dispositivo e impresora
+      ejecutarDiagnosticoImpresora();
       
       // Verificar cola periódicamente incluso si no estás logueado
       setInterval(verificarColaPendiente, 60000); // Cada minuto
@@ -214,69 +246,119 @@
       }
     };
     
-    // Función para detectar la impresora térmica del POS
-    function detectarImpresora() {
-      console.log("Detectando impresora térmica en el dispositivo POS Q2i...");
+    // Función de diagnóstico avanzado para detectar métodos de impresión
+    function ejecutarDiagnosticoImpresora() {
+      const debugInfo = document.getElementById('debugInfo');
+      debugInfo.innerHTML = "<p>Iniciando diagnóstico de dispositivo e impresora...</p>";
       
-      // Detectar objeto android (común en dispositivos POS)
-      if (window.android) {
-        console.log("Detectado objeto window.android");
-        
-        // Intentar encontrar métodos de impresión
-        if (typeof window.android.printText === 'function') {
-          console.log("- Método disponible: android.printText");
-          posImpresora = window.android;
-          usoSimulacion = false;
+      // Información del dispositivo
+      deviceInfo = {
+        userAgent: navigator.userAgent,
+        platform: navigator.platform,
+        isAndroid: isAndroid
+      };
+      
+      debugInfo.innerHTML += "<p>User Agent: " + deviceInfo.userAgent + "</p>";
+      debugInfo.innerHTML += "<p>Plataforma: " + deviceInfo.platform + "</p>";
+      debugInfo.innerHTML += "<p>Es Android: " + deviceInfo.isAndroid + "</p>";
+      
+      // Buscar objetos relacionados con impresoras en window
+      const objectsToCheck = [
+        'android', 'printer', 'sunmi', 'woyou', 'P716QJ', 'P716', 'Q2i', 
+        'escpos', 'ESCPOS', 'ESC_POS', 'JSBridge', 'PrintManager', 'PrinterManager',
+        'Printer', 'cordova', 'deviceapis', 'print'
+      ];
+      
+      debugInfo.innerHTML += "<p>Buscando objetos de impresión en el dispositivo:</p>";
+      
+      objectsToCheck.forEach(objName => {
+        try {
+          if (window[objName]) {
+            globalObjects.push(objName);
+            debugInfo.innerHTML += "<p>- Encontrado objeto: " + objName + "</p>";
+            
+            // Detectar métodos disponibles en este objeto
+            if (typeof window[objName] === 'object' && window[objName] !== null) {
+              printerMethods[objName] = [];
+              debugInfo.innerHTML += "<p>Métodos disponibles en " + objName + ":</p>";
+              
+              for (let method in window[objName]) {
+                if (typeof window[objName][method] === 'function') {
+                  printerMethods[objName].push(method);
+                  debugInfo.innerHTML += "<p>  - " + method + "</p>";
+                  
+                  // Para métodos de impresión específicos, marcarlos
+                  if (method.toLowerCase().includes('print') || 
+                      method.toLowerCase().includes('imprimir') ||
+                      method.toLowerCase().includes('escpos')) {
+                    debugInfo.innerHTML += "<p><strong>  ↑ POSIBLE MÉTODO DE IMPRESIÓN</strong></p>";
+                  }
+                }
+              }
+            }
+            
+            // Guardar referencia al objeto android
+            if (objName === 'android') {
+              androidObj = window.android;
+            }
+            
+            // Guardar referencia al objeto printer
+            if (objName === 'printer') {
+              printerObj = window.printer;
+            }
+          }
+        } catch (e) {
+          debugInfo.innerHTML += "<p>Error al verificar " + objName + ": " + e.message + "</p>";
         }
-        else if (typeof window.android.print === 'function') {
-          console.log("- Método disponible: android.print");
-          posImpresora = window.android;
-          usoSimulacion = false;
+      });
+      
+      // Verificar métodos específicos para impresión directa
+      debugInfo.innerHTML += "<p>Verificando métodos específicos para impresión directa:</p>";
+      
+      try {
+        // Prioritario: métodos específicos para el modelo P716QJ-E1X
+        if (window.P716QJ && typeof window.P716QJ.printText === 'function') {
+          debugInfo.innerHTML += "<p><strong>✓ MÉTODO ÓPTIMO: P716QJ.printText</strong></p>";
         }
+        else if (window.P716 && typeof window.P716.print === 'function') {
+          debugInfo.innerHTML += "<p><strong>✓ MÉTODO ÓPTIMO: P716.print</strong></p>";
+        }
+        // Métodos android nativos
+        else if (window.android && typeof window.android.printText === 'function') {
+          debugInfo.innerHTML += "<p><strong>✓ MÉTODO RECOMENDADO: android.printText</strong></p>";
+        }
+        else if (window.android && typeof window.android.print === 'function') {
+          debugInfo.innerHTML += "<p><strong>✓ MÉTODO RECOMENDADO: android.print</strong></p>";
+        }
+        // Interfaces genéricas de impresora
+        else if (window.printer && typeof window.printer.print === 'function') {
+          debugInfo.innerHTML += "<p><strong>✓ MÉTODO ALTERNATIVO: printer.print</strong></p>";
+        }
+        else if (window.sunmi && typeof window.sunmi.print === 'function') {
+          debugInfo.innerHTML += "<p><strong>✓ MÉTODO ALTERNATIVO: sunmi.print</strong></p>";
+        }
+        else {
+          debugInfo.innerHTML += "<p><strong>⚠ ADVERTENCIA: No se encontró un método directo de impresión</strong></p>";
+        }
+      } catch (e) {
+        debugInfo.innerHTML += "<p>Error durante verificación de métodos: " + e.message + "</p>";
       }
       
-      // Verificar API Printer (alternativa)
-      if (!posImpresora && window.printer) {
-        console.log("Detectado objeto window.printer");
-        
-        if (typeof window.printer.print === 'function') {
-          console.log("- Método disponible: printer.print");
-          posImpresora = window.printer;
-          usoSimulacion = false;
-        }
-        else if (typeof window.printer.printText === 'function') {
-          console.log("- Método disponible: printer.printText");
-          posImpresora = window.printer;
-          usoSimulacion = false;
-        }
-      }
-      
-      // Verificar API Sunmi (común en POS chinos)
-      if (!posImpresora && window.sunmi) {
-        console.log("Detectado objeto window.sunmi");
-        
-        if (typeof window.sunmi.print === 'function' || typeof window.sunmi.printText === 'function') {
-          console.log("- API de impresión Sunmi disponible");
-          posImpresora = window.sunmi;
-          usoSimulacion = false;
-        }
-      }
-      
-      // Verificar modelo específico P716QJ
-      if (!posImpresora && window.P716QJ) {
-        console.log("Detectado modelo específico P716QJ");
-        
-        if (typeof window.P716QJ.print === 'function' || typeof window.P716QJ.printText === 'function') {
-          console.log("- API de impresión P716QJ disponible");
-          posImpresora = window.P716QJ;
-          usoSimulacion = false;
-        }
-      }
-      
-      // Si no se encontró nada, caer en simulación
-      if (!posImpresora) {
-        console.log("No se encontró una API de impresión directa, se usará simulación si se intenta imprimir");
-        usoSimulacion = true;
+      debugInfo.innerHTML += "<p>Diagnóstico completado.</p>";
+      console.log("Diagnóstico de impresora:", {
+        dispositivo: deviceInfo,
+        objetos: globalObjects,
+        metodos: printerMethods
+      });
+    }
+    
+    // Función para mostrar/ocultar información de diagnóstico
+    function toggleDebugInfo() {
+      const debugInfo = document.getElementById('debugInfo');
+      if (debugInfo.style.display === 'none' || debugInfo.style.display === '') {
+        debugInfo.style.display = 'block';
+      } else {
+        debugInfo.style.display = 'none';
       }
     }
     
@@ -585,6 +667,8 @@
       }
       
       mostrarNotificacion("Iniciando impresión...");
+      const debugLog = "Intento de impresión con el texto: " + texto;
+      logToDebug(debugLog);
       
       // Guardar en historial
       const ahora = new Date();
@@ -607,71 +691,194 @@
 
       if (usuarioActual === 'admin') renderHistorial();
       
-      // Intentar acceder a la impresora térmica directamente
-      if (posImpresora && !usoSimulacion) {
-        try {
-          console.log("Intentando imprimir con método directo");
-          
-          let impresionExitosa = false;
-          
-          // Intentar varios métodos directos de impresión
-          if (typeof posImpresora.printText === 'function') {
-            console.log("Usando método printText");
-            posImpresora.printText(texto);
-            impresionExitosa = true;
-          }
-          else if (typeof posImpresora.print === 'function') {
-            console.log("Usando método print");
-            posImpresora.print(texto);
-            impresionExitosa = true;
-          }
-          
-          if (impresionExitosa) {
-            mostrarNotificacion("Impresión completada");
-            enviarNotificacionInmediata(texto, "impresa");
-            return;
-          }
-        } catch (error) {
-          console.error("Error al imprimir con método directo:", error);
-        }
-      }
+      // Vamos a probar TODOS los métodos posibles de impresión para Q2i P716QJ-E1X
+      let impresionExitosa = false;
+      let metodosIntentados = [];
       
-      // Si la impresión directa falló o no está disponible, 
-      // intentar con la API específica del modelo P716QJ-E1X
+      // 1. Intentar con P716QJ primero (específico para este modelo)
       try {
-        if (window.android) {
-          if (typeof window.android.printText === 'function') {
-            console.log("Usando android.printText");
-            window.android.printText(texto);
-            mostrarNotificacion("Impresión completada");
-            enviarNotificacionInmediata(texto, "impresa");
-            return;
-          }
-        }
-        
-        // Verificar más APIs nativas
         if (window.P716QJ) {
           if (typeof window.P716QJ.printText === 'function') {
-            console.log("Usando P716QJ.printText");
+            metodosIntentados.push("P716QJ.printText");
+            logToDebug("Intentando P716QJ.printText...");
             window.P716QJ.printText(texto);
-            mostrarNotificacion("Impresión completada");
-            enviarNotificacionInmediata(texto, "impresa");
-            return;
+            impresionExitosa = true;
+            logToDebug("✓ Éxito con P716QJ.printText");
+          }
+          else if (typeof window.P716QJ.print === 'function') {
+            metodosIntentados.push("P716QJ.print");
+            logToDebug("Intentando P716QJ.print...");
+            window.P716QJ.print(texto);
+            impresionExitosa = true;
+            logToDebug("✓ Éxito con P716QJ.print");
           }
         }
-      } catch (error) {
-        console.error("Error con métodos alternativos:", error);
+      } catch (e) {
+        logToDebug("✗ Error con P716QJ: " + e.message);
       }
       
-      // Si todos los métodos fallan, mostrar mensaje de error y simular
-      console.log("No se pudo acceder a la impresora, usando simulación");
-      mostrarError("No se pudo acceder a la impresora, utilizando simulación");
+      // 2. Intentar con Android nativo
+      if (!impresionExitosa && window.android) {
+        try {
+          if (typeof window.android.printText === 'function') {
+            metodosIntentados.push("android.printText");
+            logToDebug("Intentando android.printText...");
+            window.android.printText(texto);
+            impresionExitosa = true;
+            logToDebug("✓ Éxito con android.printText");
+          }
+          else if (typeof window.android.print === 'function') {
+            metodosIntentados.push("android.print");
+            logToDebug("Intentando android.print...");
+            window.android.print(texto);
+            impresionExitosa = true;
+            logToDebug("✓ Éxito con android.print");
+          }
+        } catch (e) {
+          logToDebug("✗ Error con android: " + e.message);
+        }
+      }
       
-      // Simular impresión (sólo mostrar mensaje)
-      setTimeout(() => {
-        mostrarNotificacion("Impresión simulada completada");
-        enviarNotificacionInmediata(texto, "impresa (simulación)");
-      }, 1500);
+      // 3. Intentar con objeto printer genérico
+      if (!impresionExitosa && window.printer) {
+        try {
+          if (typeof window.printer.print === 'function') {
+            metodosIntentados.push("printer.print");
+            logToDebug("Intentando printer.print...");
+            window.printer.print(texto);
+            impresionExitosa = true;
+            logToDebug("✓ Éxito con printer.print");
+          }
+          else if (typeof window.printer.printText === 'function') {
+            metodosIntentados.push("printer.printText");
+            logToDebug("Intentando printer.printText...");
+            window.printer.printText(texto);
+            impresionExitosa = true;
+            logToDebug("✓ Éxito con printer.printText");
+          }
+        } catch (e) {
+          logToDebug("✗ Error con printer: " + e.message);
+        }
+      }
+      
+      // 4. Intentar con objetos más específicos como Sunmi/Woyou
+      if (!impresionExitosa) {
+        const specificObjects = ['sunmi', 'woyou', 'Q2i', 'P716'];
+        
+        for (let i = 0; i < specificObjects.length; i++) {
+          const objName = specificObjects[i];
+          
+          if (window[objName]) {
+            try {
+              if (typeof window[objName].print === 'function') {
+                metodosIntentados.push(objName + ".print");
+                logToDebug("Intentando " + objName + ".print...");
+                window[objName].print(texto);
+                impresionExitosa = true;
+                logToDebug("✓ Éxito con " + objName + ".print");
+                break;
+              }
+              else if (typeof window[objName].printText === 'function') {
+                metodosIntentados.push(objName + ".printText");
+                logToDebug("Intentando " + objName + ".printText...");
+                window[objName].printText(texto);
+                impresionExitosa = true;
+                logToDebug("✓ Éxito con " + objName + ".printText");
+                break;
+              }
+            } catch (e) {
+              logToDebug("✗ Error con " + objName + ": " + e.message);
+            }
+          }
+        }
+      }
+      
+      // 5. Usar código ESC/POS directamente si los objetos anteriores fallaron
+      if (!impresionExitosa && window.android) {
+        try {
+          const escposCommands = generarComandosESCPOS(texto);
+          
+          if (typeof window.android.printRawData === 'function') {
+            metodosIntentados.push("android.printRawData (ESC/POS)");
+            logToDebug("Intentando android.printRawData con comandos ESC/POS...");
+            window.android.printRawData(escposCommands);
+            impresionExitosa = true;
+            logToDebug("✓ Éxito con android.printRawData y ESC/POS");
+          }
+          else if (typeof window.android.sendRAWData === 'function') {
+            metodosIntentados.push("android.sendRAWData (ESC/POS)");
+            logToDebug("Intentando android.sendRAWData con comandos ESC/POS...");
+            window.android.sendRAWData(escposCommands);
+            impresionExitosa = true;
+            logToDebug("✓ Éxito con android.sendRAWData y ESC/POS");
+          }
+        } catch (e) {
+          logToDebug("✗ Error con ESC/POS: " + e.message);
+        }
+      }
+      
+      // Verificar el resultado final
+      if (impresionExitosa) {
+        mostrarNotificacion("Impresión completada");
+        logToDebug("Impresión exitosa con el método: " + metodosIntentados[metodosIntentados.length - 1]);
+        enviarNotificacionInmediata(texto, "impresa");
+      } else {
+        // Si todos los métodos fallan, mostrar mensaje de error con los métodos intentados
+        mostrarError("No se pudo acceder a la impresora, utilizando simulación");
+        logToDebug("Fallaron todos los métodos de impresión intentados: " + metodosIntentados.join(", "));
+        
+        // Simular impresión (sólo mostrar mensaje)
+        setTimeout(() => {
+          mostrarNotificacion("Impresión simulada completada");
+          enviarNotificacionInmediata(texto, "impresa (simulación)");
+        }, 1500);
+      }
+    }
+    
+    // Generar comandos ESC/POS para impresoras térmicas
+    function generarComandosESCPOS(texto) {
+      // Comandos básicos ESC/POS para impresora térmica
+      const ESC = 0x1B;  // Escape
+      const GS = 0x1D;   // Group Separator
+      
+      // Crear array para comandos
+      const comandos = [];
+      
+      // 1. Inicializar impresora
+      comandos.push(ESC, 0x40);  // ESC @
+      
+      // 2. Centrar texto
+      comandos.push(ESC, 0x61, 0x01);  // ESC a 1
+      
+      // 3. Tamaño del texto (grande)
+      comandos.push(GS, 0x21, 0x11);  // GS ! 11 - tamaño doble
+      
+      // 4. Texto a imprimir
+      const textoBytes = [];
+      for (let i = 0; i < texto.length; i++) {
+        textoBytes.push(texto.charCodeAt(i));
+      }
+      comandos.push(...textoBytes);
+      
+      // 5. Salto de línea
+      comandos.push(0x0A, 0x0A); // LF LF (dos saltos de línea)
+      
+      // 6. Corte de papel
+      comandos.push(GS, 0x56, 0x00); // GS V 0 - corte completo
+      
+      return comandos;
+    }
+    
+    // Función para agregar un mensaje a la información de diagnóstico
+    function logToDebug(message) {
+      const debugInfo = document.getElementById('debugInfo');
+      const now = new Date();
+      const timestamp = now.toTimeString().split(' ')[0] + '.' + now.getMilliseconds().toString().padStart(3, '0');
+      debugInfo.innerHTML += `<p>[${timestamp}] ${message}</p>`;
+      console.log(`[DEBUG] ${message}`);
+      
+      // Auto-scroll al final
+      debugInfo.scrollTop = debugInfo.scrollHeight;
     }
     
     // Nueva función para envío inmediato de notificaciones con tipo de acción
