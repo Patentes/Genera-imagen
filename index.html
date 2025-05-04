@@ -19,9 +19,8 @@
       max-width: 100%;
       box-sizing: border-box;
     }
-    input[type="text"] {
+    input[type="text"], input[type="password"] {
       width: 80%;
-      font-size: 18px;
     }
     canvas {
       border: 1px solid #ccc;
@@ -37,6 +36,17 @@
     }
     .hidden {
       display: none;
+    }
+    #historialTabla td, #historialTabla th {
+      padding: 8px;
+      border: 1px solid #ddd;
+    }
+    #historialTabla {
+      margin: 20px auto;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
     }
     .notification {
       background-color: #4CAF50;
@@ -58,6 +68,23 @@
       border-radius: 4px;
       margin-top: 10px;
     }
+    .badge {
+      display: inline-block;
+      background-color: #ff5722;
+      color: white;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      text-align: center;
+      line-height: 20px;
+      font-size: 12px;
+      margin-left: 5px;
+    }
+    #queueStatus {
+      font-size: 14px;
+      margin-top: 10px;
+      color: #666;
+    }
     /* Estilos para botón imprimir */
     #imprimirBtn {
       display: inline-block;
@@ -69,16 +96,6 @@
       margin-top: 10px;
       margin-left: 10px;
     }
-    /* Estilos para botón generar */
-    #generarBtn {
-      background-color: #4CAF50;
-      color: white;
-      padding: 12px 24px;
-      font-size: 18px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-    }
     /* Estilos responsive para móviles */
     @media screen and (max-width: 600px) {
       body {
@@ -89,18 +106,52 @@
         height: auto;
       }
     }
+    .config-section {
+      border: 1px solid #ddd;
+      padding: 10px;
+      margin: 10px 0;
+      background-color: #f9f9f9;
+      border-radius: 5px;
+      text-align: left;
+    }
+    .config-section h3 {
+      margin-top: 0;
+    }
+    .print-options {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+    }
+    .print-option {
+      width: 48%;
+      margin-bottom: 10px;
+    }
+    .print-option label {
+      display: block;
+      margin-bottom: 5px;
+    }
   </style>
 </head>
 <body>
-  <div id="app">
+  <div id="login">
+    <h2>Iniciar Sesión</h2>
+    <input type="text" id="user" placeholder="Usuario"><br>
+    <input type="password" id="pass" placeholder="Contraseña"><br>
+    <button onclick="login()">Entrar</button>
+  </div>
+
+  <div id="app" class="hidden">
     <h1>Generador de Imagen para Impresión</h1>
-    <input type="text" id="texto" placeholder="Escribe aquí letras o número" autofocus>
+    <p>Bienvenido, <span id="nombreUsuario"></span></p>
+    <input type="text" id="texto" placeholder="Escribe aquí letras o número">
     <br>
     Tamaño del texto: <strong id="tamanioTextoLabel">24</strong> px
     <br>
     <input type="range" id="tamanioTexto" min="10" max="100" value="24">
     <br>
-    <button id="generarBtn" onclick="generarImagen()">Generar e Imprimir</button>
+    <button onclick="generarImagen()">Generar Imagen</button>
+    <button onclick="imprimirDirecto()" id="imprimirBtn">Imprimir Directamente</button>
+    <button onclick="revertirImagen()" id="revertirBtn" class="hidden">Revertir Imagen</button>
     <br>
     <div id="canvasContainer">
       <canvas id="canvas" width="200" height="100"></canvas>
@@ -108,33 +159,86 @@
     <br>
     <a id="descargarBtn" download="patente.png" class="hidden">Descargar Imagen</a>
     
-    <div id="notificacion" class="notification">Notificación enviada</div>
+    <div class="config-section hidden" id="configuracionImpresora">
+      <h3>Configuración de Impresora</h3>
+      <div class="print-options">
+        <div class="print-option">
+          <label for="anchoImpresion">Ancho de impresión (mm):</label>
+          <input type="number" id="anchoImpresion" value="58" min="40" max="80">
+        </div>
+        <div class="print-option">
+          <label for="densidadImpresion">Densidad:</label>
+          <select id="densidadImpresion">
+            <option value="0">Normal</option>
+            <option value="1">Media</option>
+            <option value="2">Alta</option>
+          </select>
+        </div>
+        <div class="print-option">
+          <label for="cortarPapel">Cortar papel:</label>
+          <input type="checkbox" id="cortarPapel" checked>
+        </div>
+      </div>
+    </div>
+    
+    <div id="notificacion" class="notification">Notificación enviada a Discord</div>
     <div id="errorNotificacion" class="notification error-notification">Error al enviar notificación</div>
+    <div id="queueStatus" class="hidden">
+      Notificaciones pendientes: <span id="queueCount">0</span>
+      <button id="sendQueueBtn" onclick="procesarColaMensajes(true)">Enviar ahora</button>
+    </div>
+  </div>
+
+  <div id="historial" class="hidden">
+    <h2>Historial de impresiones</h2>
+    <div style="overflow-x: auto;">
+      <table id="historialTabla"></table>
+    </div>
   </div>
 
   <script>
-    // Para depuración - Mostrar información del dispositivo al inicio
-    console.log("Iniciando aplicación en dispositivo");
-    console.log("User Agent:", navigator.userAgent);
-    console.log("Plataforma:", navigator.platform);
-    
+    // Service Worker para procesamiento en segundo plano
+    if ('serviceWorker' in navigator && 'SyncManager' in window) {
+      navigator.serviceWorker.register('sw.js')
+        .then(registration => {
+          console.log('Service Worker registrado correctamente:', registration);
+        })
+        .catch(error => {
+          console.error('Error al registrar el Service Worker:', error);
+        });
+    }
+
+    const users = {
+      "admin": "1234",
+      "Freddy": "Fred",
+      "Milton": "Mork"  // Agrega más usuarios aquí
+    };
+
+    let usuarioActual = null;
+    let historial = [];
     let imagenGenerada = null;
+    let colaMensajes = [];
+    let revisandoCola = false;
     
-    // Variables para impresora específica del Q2i P716QJ-E1X
-    let isPosDevice = false;
-    let printerModule = null;
-    
-    // Intentar cargar el objeto de impresora tan pronto como el DOM esté listo
-    document.addEventListener('DOMContentLoaded', function() {
-      console.log("DOM cargado - intentando acceder a las APIs de impresión");
-      buscarImpresoraQ2i();
-    });
+    // URL del webhook de Discord - ASEGÚRATE DE QUE ESTO SEA CORRECTO
+    const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1364802693012521000/MBUF565wKk7lV_xJgy5e4JqNCOI-PYOCUm1E3VxuJt9DWQ8StrXVrQGK8IOmIa0tmfz9";
+
+    // Intentamos acceder directamente a la impresora del Q2i
+    // En este caso específico, necesitamos una implementación básica que funcione sin
+    // lanzar intent:// o actividades de Android que pidan inicio de sesión
+    let posImpresora = null;
+    let usoSimulacion = false;
 
     window.onload = function() {
-      // Intentar acceder a impresora si no se ha hecho ya
-      if (!printerModule) {
-        buscarImpresoraQ2i();
-      }
+      cargarHistorial();
+      cargarColaMensajes();
+      detectarYConfigurarImpresora();
+      
+      // Verificar cola periódicamente incluso si no estás logueado
+      setInterval(verificarColaPendiente, 60000); // Cada minuto
+      
+      // Primera verificación después de 5 segundos
+      setTimeout(verificarColaPendiente, 5000);
 
       // Configurar color de fondo del canvas al cargar
       const canvas = document.getElementById('canvas');
@@ -145,127 +249,181 @@
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
       
-      // Configurar evento Enter para el campo de texto
-      document.getElementById('texto').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-          generarImagen();
+      // Verificar si hay usuario guardado
+      const usuarioGuardado = localStorage.getItem('usuarioActual');
+      if (usuarioGuardado) {
+        usuarioActual = usuarioGuardado;
+        document.getElementById('login').classList.add('hidden');
+        document.getElementById('app').classList.remove('hidden');
+        document.getElementById('nombreUsuario').textContent = usuarioActual;
+        if (usuarioActual === 'admin') {
+          document.getElementById('historial').classList.remove('hidden');
+          document.getElementById('configuracionImpresora').classList.remove('hidden');
+          renderHistorial();
+        } else {
+          document.getElementById('historial').classList.add('hidden');
+          document.getElementById('configuracionImpresora').classList.add('hidden');
         }
-      });
-      
-      // Cargar capacidades de impresión sin intent
-      cargarCapacidadesImpresion();
+      }
     };
     
-    // Función para cargar capacidades de impresión nativamente
-    function cargarCapacidadesImpresion() {
-      // Evitar cualquier inicialización que pueda pedir inicio de sesión en Google Play
-      console.log("Inicializando capacidades de impresión sin acceso a Google Play");
+    // Función específica para detectar y configurar la impresora del Q2i
+    // sin usar APIs que puedan iniciar Google Play
+    function detectarYConfigurarImpresora() {
+      console.log("Detectando impresora de Q2i...");
       
-      // Opciones especiales específicas para P716QJ-E1X
-      try {
-        // Inicializar directamente el servicio nativo
-        if (window.android && window.android.initPrinter) {
-          console.log("Iniciando servicio de impresora nativo");
-          window.android.initPrinter();
+      // Intentar detectar primero Android nativo (sin necesidad de intents o Google Play)
+      if (window.android) {
+        console.log("Detectado objeto window.android");
+        
+        // Solo para depuración: listar métodos disponibles
+        for (let key in window.android) {
+          if (typeof window.android[key] === 'function') {
+            console.log("Método disponible:", key);
+          }
         }
-        else if (window.P716QJ && window.P716QJ.init) {
-          console.log("Iniciando servicio de impresora P716QJ");
-          window.P716QJ.init();
+        
+        // Verificar si tiene métodos de impresión directa
+        if (typeof window.android.printText === 'function') {
+          console.log("Usando método android.printText para impresión directa");
+          posImpresora = window.android;
+          usoSimulacion = false;
+          return;
         }
-      } catch (e) {
-        console.log("Info: No se necesita inicialización especial para la impresora");
+        else if (typeof window.android.print === 'function') {
+          console.log("Usando método android.print para impresión directa");
+          posImpresora = window.android;
+          usoSimulacion = false;
+          return;
+        }
       }
+      
+      // Verificar API Sunmi común en estos dispositivos (sin intent)
+      if (window.sunmi && typeof window.sunmi.print === 'function') {
+        console.log("Usando Sunmi para impresión directa");
+        posImpresora = window.sunmi;
+        usoSimulacion = false;
+        return;
+      }
+      
+      // Intentar con métodos alternativos comunes en dispositivos POS
+      if (window.printer) {
+        if (typeof window.printer.print === 'function') {
+          console.log("Usando printer.print para impresión directa");
+          posImpresora = window.printer;
+          usoSimulacion = false;
+          return;
+        }
+      }
+      
+      // Si no se encontró nada, caer en simulación
+      console.log("No se encontró una API de impresión directa, usando simulación");
+      usoSimulacion = true;
     }
     
-    // Función específica para buscar impresora en Q2i P716QJ-E1X
-    function buscarImpresoraQ2i() {
-      console.log("Buscando impresora en dispositivo Q2i P716QJ-E1X");
-      
+    // Verificar y procesar la cola de mensajes pendientes
+    function verificarColaPendiente() {
+      if (navigator.onLine && colaMensajes.length > 0) {
+        procesarColaMensajes(false);
+      }
+      actualizarEstadoCola();
+    }
+    
+    // Evento que se dispara cuando se recupera la conexión
+    window.addEventListener('online', function() {
+      mostrarNotificacion("Conexión recuperada");
+      verificarColaPendiente();
+    });
+    
+    // Evento que se dispara cuando se pierde la conexión
+    window.addEventListener('offline', function() {
+      mostrarError("Conexión perdida - Las notificaciones se guardarán");
+      actualizarEstadoCola();
+    });
+
+    // Función para cargar el historial desde localStorage
+    function cargarHistorial() {
       try {
-        // Intentar múltiples métodos para obtener la impresora
-        
-        // 1. Objetos específicos para este modelo
-        if (window.P716) {
-          console.log("Detectado objeto P716");
-          printerModule = window.P716;
-          isPosDevice = true;
-        }
-        // 2. API específica de Q2i
-        else if (window.Q2i && window.Q2i.printer) {
-          console.log("Detectado objeto Q2i.printer");
-          printerModule = window.Q2i.printer;
-          isPosDevice = true;
-        }
-        // 3. Objeto printer directo
-        else if (window.printer) {
-          console.log("Detectado objeto window.printer");
-          printerModule = window.printer;
-          isPosDevice = true;
-        }
-        // 4. Object Woyou (común en impresoras térmicas chinas)
-        else if (window.woyou) {
-          console.log("Detectado objeto window.woyou");
-          printerModule = window.woyou;
-          isPosDevice = true;
-        }
-        // 5. Objeto android nativo (última opción)
-        else if (window.android) {
-          console.log("Detectado objeto window.android");
-          printerModule = window.android;
-          isPosDevice = true;
-          
-          // Intentar descubrir métodos disponibles
-          console.log("Métodos disponibles en window.android:");
-          for (let prop in window.android) {
-            if (typeof window.android[prop] === 'function') {
-              console.log(" - " + prop);
-            }
-          }
-        }
-        // 6. Para la versión específica P716QJ-E1X, verificar objeto global P716QJ
-        else if (window.P716QJ) {
-          console.log("Detectado objeto P716QJ específico del hardware");
-          printerModule = window.P716QJ;
-          isPosDevice = true;
-        }
-        
-        // Si no encuentra ninguno de los anteriores, buscar métodos relacionados con impresión
-        if (!printerModule) {
-          console.log("Buscando objetos alternativos con funciones de impresión:");
-          for (let key in window) {
-            try {
-              if (typeof window[key] === 'object' && window[key] !== null) {
-                // Verificar si el objeto tiene métodos relacionados con impresión
-                for (let method in window[key]) {
-                  if ((method.toLowerCase().includes('print') || 
-                       method.toLowerCase().includes('imprimir') ||
-                       method.toLowerCase().includes('escpos')) && 
-                      typeof window[key][method] === 'function') {
-                    console.log(`Posible API de impresión encontrada: window.${key}.${method}`);
-                    printerModule = window[key];
-                    isPosDevice = true;
-                    break;
-                  }
-                }
-              }
-            } catch (e) {
-              // Ignorar errores al acceder a propiedades
-            }
-          }
+        const historialGuardado = localStorage.getItem('historialPatentes');
+        if (historialGuardado) {
+          historial = JSON.parse(historialGuardado);
         }
       } catch (error) {
-        console.error("Error al buscar impresora:", error);
+        console.error("Error al cargar historial:", error);
+        historial = [];
       }
-      
-      if (isPosDevice && printerModule) {
-        console.log("Impresora detectada y accesible");
-      } else {
-        console.log("No se detectó impresora específica - se utilizará simulación");
-        // En un Q2i siempre asumimos que hay impresora aunque no la detectemos por software
-        isPosDevice = true;
+    }
+
+    // Función para cargar la cola de mensajes desde localStorage
+    function cargarColaMensajes() {
+      try {
+        const colaGuardada = localStorage.getItem('colaMensajesDiscord');
+        if (colaGuardada) {
+          colaMensajes = JSON.parse(colaGuardada);
+          actualizarEstadoCola();
+        }
+      } catch (error) {
+        console.error("Error al cargar cola de mensajes:", error);
+        colaMensajes = [];
       }
     }
     
+    // Función para guardar la cola de mensajes en localStorage
+    function guardarColaMensajes() {
+      try {
+        localStorage.setItem('colaMensajesDiscord', JSON.stringify(colaMensajes));
+        actualizarEstadoCola();
+      } catch (error) {
+        console.error("Error al guardar cola de mensajes:", error);
+      }
+    }
+    
+    // Función para actualizar la visualización del estado de la cola
+    function actualizarEstadoCola() {
+      const queueStatus = document.getElementById('queueStatus');
+      const queueCount = document.getElementById('queueCount');
+      
+      if (queueStatus && queueCount) {
+        if (colaMensajes.length > 0) {
+          queueStatus.classList.remove('hidden');
+          queueCount.textContent = colaMensajes.length;
+        } else {
+          queueStatus.classList.add('hidden');
+        }
+      }
+    }
+
+    function login() {
+      const u = document.getElementById('user').value;
+      const p = document.getElementById('pass').value;
+      if (users[u] && users[u] === p) {
+        usuarioActual = u;
+        // Guardar usuario en localStorage para mantener la sesión
+        localStorage.setItem('usuarioActual', usuarioActual);
+        
+        document.getElementById('login').classList.add('hidden');
+        document.getElementById('app').classList.remove('hidden');
+        document.getElementById('nombreUsuario').textContent = usuarioActual;
+        if (usuarioActual === 'admin') {
+          document.getElementById('historial').classList.remove('hidden');
+          document.getElementById('configuracionImpresora').classList.remove('hidden');
+          renderHistorial();
+        } else {
+          document.getElementById('historial').classList.add('hidden');
+          document.getElementById('configuracionImpresora').classList.add('hidden');
+        }
+        
+        // Verificar cola de mensajes al iniciar sesión
+        actualizarEstadoCola();
+        if (navigator.onLine && colaMensajes.length > 0) {
+          // Envío inmediato sin delay
+          procesarColaMensajes(true);
+        }
+      } else {
+        alert('Usuario o contraseña incorrectos');
+      }
+    }
+
     document.getElementById('tamanioTexto').addEventListener('input', e => {
       document.getElementById('tamanioTextoLabel').textContent = e.target.value;
     });
@@ -273,7 +431,7 @@
     function generarImagen() {
       const texto = document.getElementById('texto').value;
       if (!texto) {
-        alert("Por favor ingresa un texto para imprimir");
+        alert("Por favor ingresa un texto para la patente");
         return;
       }
       
@@ -319,6 +477,26 @@
 
       imagenGenerada = canvas.toDataURL('image/png', 1.0);  // Máxima calidad
 
+      // Guardar en historial
+      const ahora = new Date();
+      const nuevoRegistro = {
+        usuario: usuarioActual,
+        texto,
+        fecha: ahora.toLocaleDateString(),
+        hora: ahora.toLocaleTimeString()
+      };
+      
+      historial.push(nuevoRegistro);
+      
+      // Guardar en localStorage
+      try {
+        localStorage.setItem('historialPatentes', JSON.stringify(historial));
+      } catch (error) {
+        console.error("Error al guardar en localStorage:", error);
+      }
+
+      if (usuarioActual === 'admin') renderHistorial();
+
       // Habilitar descarga
       const enlace = document.getElementById('descargarBtn');
       enlace.classList.remove('hidden');
@@ -327,12 +505,11 @@
       // Configurar el enlace de descarga
       configurarEnlaceDescarga();
 
-      // Imprimir directamente
-      imprimirDirectamente(texto);
+      // Mostrar botón de revertir
+      document.getElementById('revertirBtn').classList.remove('hidden');
       
-      // Limpiar el campo de texto y enfocarlo para la siguiente entrada
-      document.getElementById('texto').value = '';
-      document.getElementById('texto').focus();
+      // MODIFICACIÓN: Imprimir directamente
+      imprimirDirecto();
     }
 
     function configurarEnlaceDescarga() {
@@ -370,264 +547,350 @@
         enlace.href = verifyCanvas.toDataURL('image/png', 1.0);
       };
       img.src = imagenURL;
-    }
-    
-    // Función para generar imagen optimizada para impresión
-    function generarImagenParaImprimir(texto, callback) {
-      const tamanio = document.getElementById('tamanioTexto').value;
-      const canvas = document.getElementById('canvas');
       
-      // Actualizar tamaño para impresión térmica (optimizado para 58mm)
-      const ancho = 58 * 8; // 8 pixels por mm es un buen estándar para impresoras térmicas
-      canvas.width = ancho;
-      canvas.height = 100;
+      // Limpiar cualquier evento previo para evitar duplicados
+      enlace.onclick = null;
       
-      // Mantener el tamaño visual en la página mediante CSS
-      canvas.style.width = "200px";
-      canvas.style.height = "100px";
-      
-      const ctx = canvas.getContext('2d', { alpha: false });
-      
-      // Limpiar completamente el canvas
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
-      // Fondo blanco
-      ctx.fillStyle = "#FFFFFF";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      // Configurar texto
-      ctx.fillStyle = "#000000";
-      ctx.font = `bold ${tamanio}px Arial`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      
-      // Dibujar texto
-      ctx.fillText(texto, canvas.width / 2, canvas.height / 2);
-      
-      // Guardar la imagen generada
-      imagenGenerada = canvas.toDataURL('image/png', 1.0);
-      
-      // Callback después de generar la imagen
-      if (typeof callback === 'function') {
-        callback();
+      // Para móviles - usar un enfoque más directo para la descarga
+      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+        // En móviles, simplificamos el proceso para que sea más inmediato
+        enlace.addEventListener('click', function() {
+          // Verificar URL antes de descargar
+          this.href = canvas.toDataURL('image/png', 1.0);
+          
+          // Enviar notificación inmediatamente
+          const textoPatente = document.getElementById('texto').value;
+          enviarNotificacionInmediata(textoPatente, "descargada");
+          
+          return true;
+        });
+      } else {
+        // En computadoras, también hacemos el proceso inmediato
+        enlace.addEventListener('click', function() {
+          // Actualizar URL antes de descargar
+          this.href = canvas.toDataURL('image/png', 1.0);
+          
+          // Enviar notificación a Discord inmediatamente
+          const textoPatente = document.getElementById('texto').value;
+          enviarNotificacionInmediata(textoPatente, "descargada");
+          
+          // Permitir que la descarga continúe normalmente
+          return true;
+        });
       }
     }
-    
-    // Función para imprimir directamente
-    function imprimirDirectamente(texto) {
+
+    function revertirImagen() {
+      const canvas = document.getElementById('canvas');
+      const ctx = canvas.getContext('2d');
+      const factorEscala = 4; // Usar el mismo factor de escala que en generarImagen
+
+      if (imagenGenerada) {
+        const img = new Image();
+        img.src = imagenGenerada;
+        img.onload = function () {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          // Invertir la imagen en el eje horizontal (efecto espejo)
+          ctx.save();
+          ctx.scale(-factorEscala, factorEscala); // Escalar con el factor y mantener la inversión
+          ctx.drawImage(img, -canvas.width/factorEscala, 0, canvas.width/factorEscala, canvas.height/factorEscala); // Ajustar para la escala
+          ctx.restore();
+          
+          // Guardar la nueva versión invertida
+          imagenGenerada = canvas.toDataURL('image/png', 1.0);
+          
+          // Actualizar el enlace de descarga después de cambiar la imagen
+          configurarEnlaceDescarga();
+        };
+      }
+
+      // Ocultar el botón de revertir
+      document.getElementById('revertirBtn').classList.add('hidden');
+    }
+
+    function renderHistorial() {
+      const tabla = document.getElementById('historialTabla');
+      tabla.innerHTML = '<tr><th>Usuario</th><th>Texto</th><th>Fecha</th><th>Hora</th><th>Tipo</th></tr>';
+      historial.forEach(item => {
+        const tipo = item.tipo || "imagen";
+        const fila = `<tr><td>${item.usuario}</td><td>${item.texto}</td><td>${item.fecha}</td><td>${item.hora}</td><td>${tipo}</td></tr>`;
+        tabla.innerHTML += fila;
+      });
+    }
+
+    // Función para imprimir directamente (sin dialogo)
+    function imprimirDirecto() {
+      const texto = document.getElementById('texto').value;
       if (!texto) {
-        texto = document.getElementById('texto').value;
-        if (!texto) {
-          alert("Por favor ingresa un texto para imprimir");
+        alert("Por favor ingresa un texto para imprimir");
+        return;
+      }
+      
+      // Registrar en historial
+      const ahora = new Date();
+      const nuevoRegistro = {
+        usuario: usuarioActual,
+        texto,
+        fecha: ahora.toLocaleDateString(),
+        hora: ahora.toLocaleTimeString(),
+        tipo: "impresión"
+      };
+      
+      historial.push(nuevoRegistro);
+      
+      // Guardar en localStorage
+      try {
+        localStorage.setItem('historialPatentes', JSON.stringify(historial));
+      } catch (error) {
+        console.error("Error al guardar en localStorage:", error);
+      }
+
+      if (usuarioActual === 'admin') renderHistorial();
+
+      // Mostrar notificación de inicio
+      mostrarNotificacion("Imprimiendo...");
+      
+      // Intentar imprimir usando métodos directos sin Intent
+      // Esta es la clave para evitar el diálogo de Google Play
+      if (!usoSimulacion && posImpresora) {
+        console.log("Intentando impresión directa con API nativa");
+        try {
+          let impresionExitosa = false;
+          
+          // Intentar métodos directos de impresión
+          if (typeof posImpresora.printText === 'function') {
+            posImpresora.printText(texto);
+            impresionExitosa = true;
+            console.log("Impresión exitosa usando printText");
+          } 
+          else if (typeof posImpresora.print === 'function') {
+            posImpresora.print(texto);
+            impresionExitosa = true;
+            console.log("Impresión exitosa usando print");
+          }
+          
+          if (impresionExitosa) {
+            mostrarNotificacion("Impresión completada");
+            enviarNotificacionInmediata(texto, "impresa");
+            return;
+          }
+        } catch (error) {
+          console.error("Error al imprimir directamente:", error);
+        }
+      }
+      
+      // Si la impresión directa falló o estamos en simulación
+      console.log("Impresión directa no disponible, usando solución alternativa");
+      
+      // IMPORTANTE: NUEVO ENFOQUE DE IMPRESIÓN
+      // Intentar una impresión directa a través de la API específica del Q2i
+      try {
+        // Verificar opciones específicas para el modelo Q2i P716QJ-E1X
+        if (window.android) {
+          if (window.android.printText) {
+            console.log("Enviando directamente a impresora vía android.printText");
+            window.android.printText(texto);
+            mostrarNotificacion("Impresión completada");
+            enviarNotificacionInmediata(texto, "impresa");
+            return;
+          }
+        }
+        
+        // Comprobar alternativas específicas para dispositivos POS
+        if (window.cordova && window.cordova.plugins && window.cordova.plugins.printer) {
+          window.cordova.plugins.printer.print(texto);
+          mostrarNotificacion("Impresión completada vía Cordova");
           return;
         }
-      }
-      
-      // Mostrar notificación de inicio
-      mostrarNotificacion("Iniciando impresión...");
-      
-      // Generar imagen actualizada
-      generarImagenParaImprimir(texto, function() {
-        // Llamar a la función principal de impresión
-        imprimirEnQ2i(texto);
-      });
-    }
-    
-    // Función especializada para imprimir en Q2i P716QJ-E1X sin Google Play
-    function imprimirEnQ2i(texto) {
-      console.log("Imprimiendo texto:", texto);
-      
-      // Obtener el tamaño del texto
-      const tamanio = document.getElementById('tamanioTexto').value;
-      const canvas = document.getElementById('canvas');
-      
-      try {
-        let impresionExitosa = false;
         
-        // ==========================================
-        // MÉTODO DIRECTO: Android WebView PrintManager
-        // ==========================================
-        // Este es el método más directo y menos probable que active Google Play
-        if (!impresionExitosa) {
-          try {
-            console.log("Intentando método directo del SDK nativo de Android");
-            
-            // Intentando acceder al objeto de impresión nativo de Android WebView
-            // Este método NO debería solicitar inicio de sesión en Google Play
-            if (window.android && window.android.printText) {
-              console.log("Usando android.printText");
-              window.android.printText(texto);
-              impresionExitosa = true;
-            } else if (window.android && window.android.print) {
-              console.log("Usando android.print");
-              window.android.print(texto);
-              impresionExitosa = true;
-            } else if (window.printer && window.printer.print) {
-              console.log("Usando printer.print");
-              window.printer.print(texto);
-              impresionExitosa = true;
-            } else if (window.printer && window.printer.printText) {
-              console.log("Usando printer.printText");
-              window.printer.printText(texto);
-              impresionExitosa = true;
-            }
-            
-            if (impresionExitosa) {
-              mostrarNotificacion("Impresión enviada directamente al dispositivo");
-            }
-          } catch (e) {
-            console.error("Error en método directo:", e);
-          }
+        // Intentar con PrintManager nativo de Java (último recurso)
+        if (!usoSimulacion) {
+          // Este enfoque debe ser cuidadoso para evitar Intent que requiera Google Play
+          // No implementaremos esto aquí, pues podría causar el problema
         }
-        
-        // ==========================================
-        // MÉTODO ESPECÍFICO PARA Q2i: APIs nativas
-        // ==========================================
-        if (!impresionExitosa) {
-          try {
-            console.log("Intentando acceso nativo a Q2i");
-            
-            if (window.Q2i && window.Q2i.printer) {
-              if (window.Q2i.printer.print) {
-                console.log("Usando Q2i.printer.print");
-                window.Q2i.printer.print(texto);
-                impresionExitosa = true;
-              } else if (window.Q2i.printer.printText) {
-                console.log("Usando Q2i.printer.printText");
-                window.Q2i.printer.printText(texto);
-                impresionExitosa = true;
-              }
-            } else if (window.P716QJ) {
-              if (typeof window.P716QJ.printText === 'function') {
-                console.log("Usando P716QJ.printText");
-                window.P716QJ.printText(texto);
-                impresionExitosa = true;
-              } else if (typeof window.P716QJ.print === 'function') {
-                console.log("Usando P716QJ.print");
-                window.P716QJ.print(texto);
-                impresionExitosa = true;
-              }
-            }
-          } catch (e) {
-            console.error("Error en método específico para Q2i:", e);
-          }
-        }
-        
-        // ==========================================
-        // MÉTODO MANUAL: ESC/POS nativo
-        // ==========================================
-        if (!impresionExitosa) {
-          try {
-            console.log("Intentando método ESC/POS nativo");
-            
-            const comandos = generarComandosESCPOS(texto, tamanio);
-            
-            if (window.android && window.android.printRawData) {
-              window.android.printRawData(comandos);
-              impresionExitosa = true;
-            } else if (window.android && window.android.sendRAWData) {
-              window.android.sendRAWData(comandos);
-              impresionExitosa = true;
-            } else if (window.printer && window.printer.sendCommand) {
-              window.printer.sendCommand(comandos);
-              impresionExitosa = true;
-            }
-          } catch (e) {
-            console.error("Error en método ESC/POS:", e);
-          }
-        }
-        
-        // ==========================================
-        // MÉTODO ALTERNATIVO: WebUSB si está disponible
-        // ==========================================
-        if (!impresionExitosa && navigator.usb) {
-          try {
-            console.log("Intentando WebUSB para acceso directo a hardware");
-            // Nota: Este código es asincrónico, pero lo dejamos como ejemplo
-            // Implementación simplificada para este caso
-            
-            // No ejecutamos realmente esto aquí porque podría pedir permisos
-            // Y eso no es lo que queremos en este momento
-            impresionExitosa = false;
-          } catch (e) {
-            console.error("Error en WebUSB:", e);
-          }
-        }
-        
-        // ==========================================
-        // RESULTADO FINAL
-        // ==========================================
-        if (impresionExitosa) {
-          mostrarNotificacion("Impresión completada");
-        } else {
-          // Si todo falla, mostrar error e intentar la simulación
-          console.warn("Los métodos nativos de impresión fallaron, utilizando simulación");
-          mostrarError("No se pudo acceder a la impresora. Usando simulación.");
-          simularImpresion(texto);
-        }
-        
       } catch (error) {
-        console.error("Error general al imprimir:", error);
-        mostrarError("Error de impresión. Usando simulación.");
-        simularImpresion(texto);
+        console.error("Error en intento alternativo de impresión:", error);
       }
+      
+      // Si todos los intentos fallan, simular
+      console.log("Todos los métodos fallaron, usando simulación");
+      simularImpresion(texto);
     }
     
-    // Generar comandos ESC/POS para impresoras térmicas
-    function generarComandosESCPOS(texto, tamanio) {
-      // Comandos básicos ESC/POS para impresora térmica
-      const ESC = 0x1B;  // Escape
-      const GS = 0x1D;   // Group Separator
-      
-      // Crear array para comandos
-      const comandos = [];
-      
-      // 1. Inicializar impresora
-      comandos.push(ESC, 0x40);  // ESC @
-      
-      // 2. Centrar texto
-      comandos.push(ESC, 0x61, 0x01);  // ESC a 1
-      
-      // 3. Tamaño del texto (multiplicador de tamaño)
-      let multiplicador = 0;
-      if (tamanio <= 12) multiplicador = 0;      // Normal
-      else if (tamanio <= 20) multiplicador = 1; // Medio
-      else if (tamanio <= 32) multiplicador = 2; // Grande
-      else multiplicador = 3;                    // Muy grande
-      
-      // GS ! n - donde n es el tamaño (bit 0-3 para ancho, 4-7 para alto)
-      const tamañoComando = (multiplicador << 4) | multiplicador;
-      comandos.push(GS, 0x21, tamañoComando);
-      
-      // 4. Texto a imprimir
-      const textoBytes = [];
-      for (let i = 0; i < texto.length; i++) {
-        textoBytes.push(texto.charCodeAt(i));
-      }
-      comandos.push(...textoBytes);
-      
-      // 5. Salto de línea
-      comandos.push(0x0A, 0x0A); // LF LF (dos saltos de línea)
-      
-      // 6. Corte de papel
-      comandos.push(GS, 0x56, 0x00); // GS V 0 - corte completo
-      
-      // Convertir a string o array depende de la API
-      return comandos;
-    }
-    
-    // Simulación de impresión para casos fallidos o pruebas
+    // Simulación de impresión (cuando no tenemos acceso real a la impresora)
     function simularImpresion(texto) {
-      // Generar la imagen primero
-      generarImagenParaImprimir(texto, function() {
-        // Mostrar una notificación de "imprimiendo"
-        mostrarNotificacion("Simulando impresión...");
-        
-        // Simular un tiempo de impresión
-        setTimeout(function() {
-          mostrarNotificacion("Impresión completada (simulación)");
-        }, 1500);
+      console.log("Simulando impresión para:", texto);
+      
+      // Mostrar notificación de simulación
+      mostrarNotificacion("Simulando impresión (no disponible)...");
+      
+      // Simular un retraso para hacerlo más realista
+      setTimeout(() => {
+        mostrarNotificacion("Impresión simulada completada");
+        // Enviar notificación aún en simulación
+        enviarNotificacionInmediata(texto, "impresa (simulación)");
+      }, 1500);
+    }
+    
+    // Nueva función para envío inmediato de notificaciones con tipo de acción
+    function enviarNotificacionInmediata(textoPatente, accion = "descargada") {
+      // Usar el usuario actual o 'Anónimo' si no hay sesión iniciada
+      const usuario = usuarioActual || 'Anónimo';
+      
+      // Crear el mensaje para Discord - Formato simple para mayor compatibilidad
+      const mensaje = {
+        content: `¡Nueva patente ${accion}! Usuario: ${usuario}, Texto: ${textoPatente}, Fecha: ${new Date().toLocaleString()}`
+      };
+      
+      // Si no hay conexión, añadir a la cola
+      if (!navigator.onLine) {
+        agregarMensajeACola(mensaje);
+        mostrarNotificacion("Sin conexión. Notificación guardada para envío posterior.");
+        return;
+      }
+      
+      // Mostrar mensaje de "enviando..."
+      mostrarNotificacion("Enviando notificación...");
+      
+      // Enviar directamente sin delay
+      const opciones = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(mensaje)
+      };
+      
+      fetch(DISCORD_WEBHOOK_URL, opciones)
+        .then(response => {
+          if (response.ok) {
+            mostrarNotificacion("¡Notificación enviada correctamente!");
+            return;
+          }
+          throw new Error("Error al enviar notificación");
+        })
+        .catch(error => {
+          // Si falla, intentar con proxy sin delay
+          const PROXY_URL = "https://corsproxy.io/?url=";
+          fetch(PROXY_URL + encodeURIComponent(DISCORD_WEBHOOK_URL), opciones)
+            .then(response => {
+              if (response.ok) {
+                mostrarNotificacion("¡Notificación enviada correctamente!");
+                return;
+              }
+              throw new Error("Error al enviar notificación con proxy");
+            })
+            .catch(err => {
+              // Si ambos métodos fallan, agregar a la cola
+              agregarMensajeACola(mensaje);
+              mostrarNotificacion("No se pudo enviar la notificación ahora. Se intentará más tarde.");
+            });
+        });
+    }
+    
+    // Función para agregar un mensaje a la cola
+    function agregarMensajeACola(mensaje) {
+      colaMensajes.push({
+        mensaje: mensaje,
+        timestamp: new Date().getTime()
       });
+      guardarColaMensajes();
+      actualizarEstadoCola();
+    }
+    
+    // Función para procesar la cola de mensajes
+    function procesarColaMensajes(manual = false) {
+      // Si ya estamos procesando o no hay mensajes, salir
+      if (revisandoCola || colaMensajes.length === 0) return;
+      
+      // Si no hay conexión, salir
+      if (!navigator.onLine) {
+        if (manual) {
+          mostrarError("No hay conexión a internet. Inténtalo más tarde.");
+        }
+        return;
+      }
+      
+      revisandoCola = true;
+      
+      if (manual) {
+        mostrarNotificacion("Enviando notificaciones pendientes...");
+      }
+      
+      // Tomar el primer mensaje de la cola
+      const item = colaMensajes[0];
+      
+      // Opciones para el envío
+      const opciones = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(item.mensaje)
+      };
+      
+      // Intentar enviar el mensaje
+      fetch(DISCORD_WEBHOOK_URL, opciones)
+        .then(response => {
+          if (response.ok) {
+            // Si el envío fue exitoso, eliminar de la cola
+            colaMensajes.shift();
+            guardarColaMensajes();
+            
+            if (manual) {
+              mostrarNotificacion(`Notificación enviada (quedan ${colaMensajes.length})`);
+            }
+            
+            // Si hay más mensajes, procesar el siguiente inmediatamente
+            if (colaMensajes.length > 0) {
+              revisandoCola = false;
+              procesarColaMensajes(manual);
+            } else {
+              revisandoCola = false;
+              if (manual) {
+                mostrarNotificacion("Todas las notificaciones pendientes enviadas");
+              }
+            }
+          } else {
+            // Si hubo un error, intentar con proxy
+            throw new Error("Error al enviar");
+          }
+        })
+        .catch(error => {
+          // Probar con proxy inmediatamente
+          const PROXY_URL = "https://corsproxy.io/?url=";
+          fetch(PROXY_URL + encodeURIComponent(DISCORD_WEBHOOK_URL), opciones)
+            .then(response => {
+              if (response.ok) {
+                // Si el envío fue exitoso, eliminar de la cola
+                colaMensajes.shift();
+                guardarColaMensajes();
+                
+                if (manual) {
+                  mostrarNotificacion(`Notificación enviada (quedan ${colaMensajes.length})`);
+                }
+              } else {
+                if (manual) {
+                  mostrarError("No se pudo enviar la notificación.");
+                }
+              }
+              
+              // Terminar el procesamiento actual
+              revisandoCola = false;
+              
+              // Si hay más mensajes, procesar el siguiente inmediatamente
+              if (colaMensajes.length > 0 && response.ok) {
+                procesarColaMensajes(manual);
+              }
+            })
+            .catch(error => {
+              revisandoCola = false;
+              if (manual) {
+                mostrarError("No se pudo enviar la notificación.");
+              }
+            });
+        });
     }
     
     // Función para mostrar notificación en la interfaz
@@ -681,6 +944,13 @@
         console.error("Error (silencioso): " + mensaje);
       }
     }
+    
+    // Verificar cola periódicamente incluso si la página está en segundo plano
+    setInterval(function() {
+      if (document.visibilityState === 'hidden') {
+        verificarColaPendiente();
+      }
+    }, 300000); // Cada 5 minutos si la página está en segundo plano
   </script>
 </body>
 </html>
