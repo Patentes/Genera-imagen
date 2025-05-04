@@ -153,9 +153,6 @@
       Notificaciones pendientes: <span id="queueCount">0</span>
       <button id="sendQueueBtn" onclick="procesarColaMensajes(true)">Enviar ahora</button>
     </div>
-    
-    <!-- Elemento oculto para imprimir -->
-    <div id="printContent" class="hidden"></div>
   </div>
 
   <div id="historial" class="hidden">
@@ -602,71 +599,113 @@
 
       if (usuarioActual === 'admin') renderHistorial();
       
-      // Optimizado para imprimir solo una vez con el formato adecuado
+      // Optimizado para usar window.print() nativo pero con imagen
       try {
-        console.log("Usando window.print() optimizado para formato único");
+        console.log("Usando window.print() nativo con la imagen del canvas");
         
-        // Crear el contenido de impresión optimizado
-        const printContent = document.getElementById('printContent');
         const canvas = document.getElementById('canvas');
         
-        // Obtener el tamaño del texto para la impresión
-        const tamanioTexto = document.getElementById('tamanioTexto').value;
+        // Guardar el contenido original
+        const contenidoOriginal = document.body.innerHTML;
         
-        // Configurar el contenido para impresión optimizado sólo para impresora térmica
-        printContent.innerHTML = `
-          <div style="text-align:center; padding:5px; width:100%; font-family:Arial, sans-serif;">
-            <div style="font-size:${tamanioTexto * 1.5}px; font-weight:bold; margin-bottom:10px;">${texto}</div>
-          </div>
+        // Configurar una página temporal para impresión
+        const contenidoImpresion = `
+          <html>
+          <head>
+            <style>
+              @page {
+                size: auto;
+                margin: 0mm;
+              }
+              body {
+                margin: 0;
+                padding: 0;
+                text-align: center;
+              }
+              .texto-grande {
+                font-family: Arial, sans-serif;
+                font-size: 36pt;
+                font-weight: bold;
+                margin: 20px 0;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="texto-grande">${texto}</div>
+          </body>
+          </html>
         `;
         
-        // Mostrar el contenido para impresión
-        printContent.classList.remove('hidden');
+        // Crear un iframe para la impresión
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        document.body.appendChild(iframe);
         
-        // Imprimir
+        // Escribir el contenido al iframe
+        const doc = iframe.contentDocument || iframe.contentWindow.document;
+        doc.open();
+        doc.write(contenidoImpresion);
+        doc.close();
+        
+        // Permitir que el iframe se cargue
         setTimeout(() => {
-          window.print();
+          // Imprimir el iframe
+          iframe.contentWindow.print();
           
-          // Ocultar el contenido de impresión después de imprimir
+          // Eliminar el iframe después
           setTimeout(() => {
-            printContent.classList.add('hidden');
-          }, 500);
+            document.body.removeChild(iframe);
+          }, 1000);
           
           // Notificar éxito
           mostrarNotificacion("Impresión completada");
           enviarNotificacionInmediata(texto, "impresa");
-        }, 300);
+        }, 500);
+        
       } catch (e) {
         console.error("Error al imprimir:", e);
-        mostrarError("Error al imprimir");
         
-        // Intentar método alternativo si el principal falla
+        // Si el método principal falla, intentar un método alternativo
         try {
-          // Crear un iframe para imprimir
-          const iframe = document.createElement('iframe');
-          iframe.style.display = 'none';
-          document.body.appendChild(iframe);
-          
-          // Configurar contenido del iframe
-          const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-          iframeDoc.body.innerHTML = `
-            <div style="text-align:center; padding:0; margin:0;">
-              <div style="font-size:36px; font-weight:bold;">${texto}</div>
-            </div>
-          `;
-          
-          // Imprimir el iframe
-          setTimeout(() => {
-            iframe.contentWindow.print();
+          // Usar print directo
+          if (typeof window.print === 'function') {
+            // Crear un elemento oculto con solo el texto
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = `<div style="text-align:center; font-size:36pt; font-weight:bold;">${texto}</div>`;
+            tempDiv.style.display = 'none';
+            document.body.appendChild(tempDiv);
             
-            // Limpiar
-            setTimeout(() => {
-              document.body.removeChild(iframe);
-            }, 500);
+            // Guardar los elementos visibles y ocultar todo excepto el texto a imprimir
+            const elemVisibilidad = [];
+            document.body.childNodes.forEach(function(node) {
+              if (node.style) {
+                elemVisibilidad.push({
+                  elem: node,
+                  vis: node.style.display
+                });
+                node.style.display = 'none';
+              }
+            });
+            
+            // Mostrar solo el texto a imprimir
+            tempDiv.style.display = 'block';
+            
+            // Imprimir
+            window.print();
+            
+            // Restaurar visibilidad
+            elemVisibilidad.forEach(function(item) {
+              item.elem.style.display = item.vis;
+            });
+            
+            // Eliminar el div temporal
+            document.body.removeChild(tempDiv);
             
             mostrarNotificacion("Impresión completada");
             enviarNotificacionInmediata(texto, "impresa");
-          }, 300);
+          } else {
+            throw new Error("window.print no es una función");
+          }
         } catch (e2) {
           console.error("Error en método alternativo:", e2);
           mostrarError("No se pudo imprimir");
