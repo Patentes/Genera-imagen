@@ -68,6 +68,15 @@
       border-radius: 4px;
       margin-top: 10px;
     }
+    #imprimirBtn {
+      display: inline-block;
+      background-color: #2196F3;
+      color: white;
+      padding: 10px 20px;
+      text-decoration: none;
+      border-radius: 4px;
+      margin-top: 10px;
+    }
     .badge {
       display: inline-block;
       background-color: #ff5722;
@@ -85,17 +94,6 @@
       margin-top: 10px;
       color: #666;
     }
-    /* Estilos para botón imprimir */
-    #imprimirBtn {
-      display: inline-block;
-      background-color: #2196F3;
-      color: white;
-      padding: 10px 20px;
-      text-decoration: none;
-      border-radius: 4px;
-      margin-top: 10px;
-      margin-left: 10px;
-    }
     /* Estilos responsive para móviles */
     @media screen and (max-width: 600px) {
       body {
@@ -105,30 +103,6 @@
         width: 90%;
         height: auto;
       }
-    }
-    .config-section {
-      border: 1px solid #ddd;
-      padding: 10px;
-      margin: 10px 0;
-      background-color: #f9f9f9;
-      border-radius: 5px;
-      text-align: left;
-    }
-    .config-section h3 {
-      margin-top: 0;
-    }
-    .print-options {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-    }
-    .print-option {
-      width: 48%;
-      margin-bottom: 10px;
-    }
-    .print-option label {
-      display: block;
-      margin-bottom: 5px;
     }
   </style>
 </head>
@@ -150,7 +124,6 @@
     <input type="range" id="tamanioTexto" min="10" max="100" value="24">
     <br>
     <button onclick="generarImagen()">Generar Imagen</button>
-    <button onclick="imprimirDirecto()" id="imprimirBtn">Imprimir Directamente</button>
     <button onclick="revertirImagen()" id="revertirBtn" class="hidden">Revertir Imagen</button>
     <br>
     <div id="canvasContainer">
@@ -158,29 +131,7 @@
     </div>
     <br>
     <a id="descargarBtn" download="patente.png" class="hidden">Descargar Imagen</a>
-    
-    <div class="config-section hidden" id="configuracionImpresora">
-      <h3>Configuración de Impresora</h3>
-      <div class="print-options">
-        <div class="print-option">
-          <label for="anchoImpresion">Ancho de impresión (mm):</label>
-          <input type="number" id="anchoImpresion" value="58" min="40" max="80">
-        </div>
-        <div class="print-option">
-          <label for="densidadImpresion">Densidad:</label>
-          <select id="densidadImpresion">
-            <option value="0">Normal</option>
-            <option value="1">Media</option>
-            <option value="2">Alta</option>
-          </select>
-        </div>
-        <div class="print-option">
-          <label for="cortarPapel">Cortar papel:</label>
-          <input type="checkbox" id="cortarPapel" checked>
-        </div>
-      </div>
-    </div>
-    
+    <button id="imprimirBtn" onclick="imprimirImagen()" class="hidden">Imprimir Imagen</button>
     <div id="notificacion" class="notification">Notificación enviada a Discord</div>
     <div id="errorNotificacion" class="notification error-notification">Error al enviar notificación</div>
     <div id="queueStatus" class="hidden">
@@ -224,15 +175,13 @@
     const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1364802693012521000/MBUF565wKk7lV_xJgy5e4JqNCOI-PYOCUm1E3VxuJt9DWQ8StrXVrQGK8IOmIa0tmfz9";
 
     // Intentamos acceder directamente a la impresora del Q2i
-    // En este caso específico, necesitamos una implementación básica que funcione sin
-    // lanzar intent:// o actividades de Android que pidan inicio de sesión
     let posImpresora = null;
     let usoSimulacion = false;
 
     window.onload = function() {
       cargarHistorial();
       cargarColaMensajes();
-      detectarYConfigurarImpresora();
+      detectarImpresora();
       
       // Verificar cola periódicamente incluso si no estás logueado
       setInterval(verificarColaPendiente, 60000); // Cada minuto
@@ -258,67 +207,77 @@
         document.getElementById('nombreUsuario').textContent = usuarioActual;
         if (usuarioActual === 'admin') {
           document.getElementById('historial').classList.remove('hidden');
-          document.getElementById('configuracionImpresora').classList.remove('hidden');
           renderHistorial();
         } else {
           document.getElementById('historial').classList.add('hidden');
-          document.getElementById('configuracionImpresora').classList.add('hidden');
         }
       }
     };
     
-    // Función específica para detectar y configurar la impresora del Q2i
-    // sin usar APIs que puedan iniciar Google Play
-    function detectarYConfigurarImpresora() {
-      console.log("Detectando impresora de Q2i...");
+    // Función para detectar la impresora térmica del POS
+    function detectarImpresora() {
+      console.log("Detectando impresora térmica en el dispositivo POS Q2i...");
       
-      // Intentar detectar primero Android nativo (sin necesidad de intents o Google Play)
+      // Detectar objeto android (común en dispositivos POS)
       if (window.android) {
         console.log("Detectado objeto window.android");
         
-        // Solo para depuración: listar métodos disponibles
-        for (let key in window.android) {
-          if (typeof window.android[key] === 'function') {
-            console.log("Método disponible:", key);
-          }
-        }
-        
-        // Verificar si tiene métodos de impresión directa
+        // Intentar encontrar métodos de impresión
         if (typeof window.android.printText === 'function') {
-          console.log("Usando método android.printText para impresión directa");
+          console.log("- Método disponible: android.printText");
           posImpresora = window.android;
           usoSimulacion = false;
-          return;
         }
         else if (typeof window.android.print === 'function') {
-          console.log("Usando método android.print para impresión directa");
+          console.log("- Método disponible: android.print");
           posImpresora = window.android;
           usoSimulacion = false;
-          return;
         }
       }
       
-      // Verificar API Sunmi común en estos dispositivos (sin intent)
-      if (window.sunmi && typeof window.sunmi.print === 'function') {
-        console.log("Usando Sunmi para impresión directa");
-        posImpresora = window.sunmi;
-        usoSimulacion = false;
-        return;
-      }
-      
-      // Intentar con métodos alternativos comunes en dispositivos POS
-      if (window.printer) {
+      // Verificar API Printer (alternativa)
+      if (!posImpresora && window.printer) {
+        console.log("Detectado objeto window.printer");
+        
         if (typeof window.printer.print === 'function') {
-          console.log("Usando printer.print para impresión directa");
+          console.log("- Método disponible: printer.print");
           posImpresora = window.printer;
           usoSimulacion = false;
-          return;
+        }
+        else if (typeof window.printer.printText === 'function') {
+          console.log("- Método disponible: printer.printText");
+          posImpresora = window.printer;
+          usoSimulacion = false;
+        }
+      }
+      
+      // Verificar API Sunmi (común en POS chinos)
+      if (!posImpresora && window.sunmi) {
+        console.log("Detectado objeto window.sunmi");
+        
+        if (typeof window.sunmi.print === 'function' || typeof window.sunmi.printText === 'function') {
+          console.log("- API de impresión Sunmi disponible");
+          posImpresora = window.sunmi;
+          usoSimulacion = false;
+        }
+      }
+      
+      // Verificar modelo específico P716QJ
+      if (!posImpresora && window.P716QJ) {
+        console.log("Detectado modelo específico P716QJ");
+        
+        if (typeof window.P716QJ.print === 'function' || typeof window.P716QJ.printText === 'function') {
+          console.log("- API de impresión P716QJ disponible");
+          posImpresora = window.P716QJ;
+          usoSimulacion = false;
         }
       }
       
       // Si no se encontró nada, caer en simulación
-      console.log("No se encontró una API de impresión directa, usando simulación");
-      usoSimulacion = true;
+      if (!posImpresora) {
+        console.log("No se encontró una API de impresión directa, se usará simulación si se intenta imprimir");
+        usoSimulacion = true;
+      }
     }
     
     // Verificar y procesar la cola de mensajes pendientes
@@ -406,11 +365,9 @@
         document.getElementById('nombreUsuario').textContent = usuarioActual;
         if (usuarioActual === 'admin') {
           document.getElementById('historial').classList.remove('hidden');
-          document.getElementById('configuracionImpresora').classList.remove('hidden');
           renderHistorial();
         } else {
           document.getElementById('historial').classList.add('hidden');
-          document.getElementById('configuracionImpresora').classList.add('hidden');
         }
         
         // Verificar cola de mensajes al iniciar sesión
@@ -497,7 +454,7 @@
 
       if (usuarioActual === 'admin') renderHistorial();
 
-      // Habilitar descarga
+      // Habilitar descarga e impresión
       const enlace = document.getElementById('descargarBtn');
       enlace.classList.remove('hidden');
       enlace.textContent = "Descargar Imagen";
@@ -508,8 +465,8 @@
       // Mostrar botón de revertir
       document.getElementById('revertirBtn').classList.remove('hidden');
       
-      // MODIFICACIÓN: Imprimir directamente
-      imprimirDirecto();
+      // Mostrar botón de impresión
+      document.getElementById('imprimirBtn').classList.remove('hidden');
     }
 
     function configurarEnlaceDescarga() {
@@ -618,16 +575,18 @@
         tabla.innerHTML += fila;
       });
     }
-
-    // Función para imprimir directamente (sin dialogo)
-    function imprimirDirecto() {
+    
+    // Función para imprimir la imagen generada
+    function imprimirImagen() {
       const texto = document.getElementById('texto').value;
       if (!texto) {
         alert("Por favor ingresa un texto para imprimir");
         return;
       }
       
-      // Registrar en historial
+      mostrarNotificacion("Iniciando impresión...");
+      
+      // Guardar en historial
       const ahora = new Date();
       const nuevoRegistro = {
         usuario: usuarioActual,
@@ -647,27 +606,24 @@
       }
 
       if (usuarioActual === 'admin') renderHistorial();
-
-      // Mostrar notificación de inicio
-      mostrarNotificacion("Imprimiendo...");
       
-      // Intentar imprimir usando métodos directos sin Intent
-      // Esta es la clave para evitar el diálogo de Google Play
-      if (!usoSimulacion && posImpresora) {
-        console.log("Intentando impresión directa con API nativa");
+      // Intentar acceder a la impresora térmica directamente
+      if (posImpresora && !usoSimulacion) {
         try {
+          console.log("Intentando imprimir con método directo");
+          
           let impresionExitosa = false;
           
-          // Intentar métodos directos de impresión
+          // Intentar varios métodos directos de impresión
           if (typeof posImpresora.printText === 'function') {
+            console.log("Usando método printText");
             posImpresora.printText(texto);
             impresionExitosa = true;
-            console.log("Impresión exitosa usando printText");
-          } 
+          }
           else if (typeof posImpresora.print === 'function') {
+            console.log("Usando método print");
             posImpresora.print(texto);
             impresionExitosa = true;
-            console.log("Impresión exitosa usando print");
           }
           
           if (impresionExitosa) {
@@ -676,20 +632,16 @@
             return;
           }
         } catch (error) {
-          console.error("Error al imprimir directamente:", error);
+          console.error("Error al imprimir con método directo:", error);
         }
       }
       
-      // Si la impresión directa falló o estamos en simulación
-      console.log("Impresión directa no disponible, usando solución alternativa");
-      
-      // IMPORTANTE: NUEVO ENFOQUE DE IMPRESIÓN
-      // Intentar una impresión directa a través de la API específica del Q2i
+      // Si la impresión directa falló o no está disponible, 
+      // intentar con la API específica del modelo P716QJ-E1X
       try {
-        // Verificar opciones específicas para el modelo Q2i P716QJ-E1X
         if (window.android) {
-          if (window.android.printText) {
-            console.log("Enviando directamente a impresora vía android.printText");
+          if (typeof window.android.printText === 'function') {
+            console.log("Usando android.printText");
             window.android.printText(texto);
             mostrarNotificacion("Impresión completada");
             enviarNotificacionInmediata(texto, "impresa");
@@ -697,38 +649,27 @@
           }
         }
         
-        // Comprobar alternativas específicas para dispositivos POS
-        if (window.cordova && window.cordova.plugins && window.cordova.plugins.printer) {
-          window.cordova.plugins.printer.print(texto);
-          mostrarNotificacion("Impresión completada vía Cordova");
-          return;
-        }
-        
-        // Intentar con PrintManager nativo de Java (último recurso)
-        if (!usoSimulacion) {
-          // Este enfoque debe ser cuidadoso para evitar Intent que requiera Google Play
-          // No implementaremos esto aquí, pues podría causar el problema
+        // Verificar más APIs nativas
+        if (window.P716QJ) {
+          if (typeof window.P716QJ.printText === 'function') {
+            console.log("Usando P716QJ.printText");
+            window.P716QJ.printText(texto);
+            mostrarNotificacion("Impresión completada");
+            enviarNotificacionInmediata(texto, "impresa");
+            return;
+          }
         }
       } catch (error) {
-        console.error("Error en intento alternativo de impresión:", error);
+        console.error("Error con métodos alternativos:", error);
       }
       
-      // Si todos los intentos fallan, simular
-      console.log("Todos los métodos fallaron, usando simulación");
-      simularImpresion(texto);
-    }
-    
-    // Simulación de impresión (cuando no tenemos acceso real a la impresora)
-    function simularImpresion(texto) {
-      console.log("Simulando impresión para:", texto);
+      // Si todos los métodos fallan, mostrar mensaje de error y simular
+      console.log("No se pudo acceder a la impresora, usando simulación");
+      mostrarError("No se pudo acceder a la impresora, utilizando simulación");
       
-      // Mostrar notificación de simulación
-      mostrarNotificacion("Simulando impresión (no disponible)...");
-      
-      // Simular un retraso para hacerlo más realista
+      // Simular impresión (sólo mostrar mensaje)
       setTimeout(() => {
         mostrarNotificacion("Impresión simulada completada");
-        // Enviar notificación aún en simulación
         enviarNotificacionInmediata(texto, "impresa (simulación)");
       }, 1500);
     }
