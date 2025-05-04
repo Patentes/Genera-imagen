@@ -94,16 +94,6 @@
       margin-top: 10px;
       color: #666;
     }
-    /* Estilos responsive para móviles */
-    @media screen and (max-width: 600px) {
-      body {
-        padding: 10px;
-      }
-      canvas {
-        width: 90%;
-        height: auto;
-      }
-    }
     #debugInfo {
       margin-top: 20px;
       text-align: left;
@@ -116,14 +106,27 @@
       overflow-y: auto;
       display: none;
     }
-    #showDebugBtn {
-      margin-top: 10px;
+    #toggleDebugBtn {
+      margin-top: 20px;
       background-color: #607d8b;
       color: white;
       border: none;
-      padding: 5px 10px;
+      padding: 10px 20px;
       border-radius: 4px;
       cursor: pointer;
+      display: block;
+      width: 100%;
+      font-size: 14px;
+    }
+    /* Estilos responsive para móviles */
+    @media screen and (max-width: 600px) {
+      body {
+        padding: 10px;
+      }
+      canvas {
+        width: 90%;
+        height: auto;
+      }
     }
   </style>
 </head>
@@ -145,7 +148,7 @@
     <input type="range" id="tamanioTexto" min="10" max="100" value="24">
     <br>
     <button onclick="generarImagen()">Generar Imagen</button>
-    <button onclick="revertirImagen()" id="revertirBtn" class="hidden">Revertir Imagen</button>
+    <button onclick="toggleRevertirImagen()" id="revertirBtn" class="hidden">Revertir Imagen</button>
     <br>
     <div id="canvasContainer">
       <canvas id="canvas" width="200" height="100"></canvas>
@@ -160,7 +163,7 @@
       <button id="sendQueueBtn" onclick="procesarColaMensajes(true)">Enviar ahora</button>
     </div>
     
-    <button id="showDebugBtn" onclick="toggleDebugInfo()">Mostrar/Ocultar Información de Diagnóstico</button>
+    <button id="toggleDebugBtn" onclick="toggleDebugInfo()">Mostrar Información de Diagnóstico</button>
     <div id="debugInfo"></div>
   </div>
 
@@ -192,6 +195,8 @@
     let usuarioActual = null;
     let historial = [];
     let imagenGenerada = null;
+    let imagenRevertida = null; // Para guardar la versión revertida
+    let imagenEstaRevertida = false; // Control de estado de la imagen
     let colaMensajes = [];
     let revisandoCola = false;
     
@@ -355,10 +360,14 @@
     // Función para mostrar/ocultar información de diagnóstico
     function toggleDebugInfo() {
       const debugInfo = document.getElementById('debugInfo');
+      const toggleBtn = document.getElementById('toggleDebugBtn');
+      
       if (debugInfo.style.display === 'none' || debugInfo.style.display === '') {
         debugInfo.style.display = 'block';
+        toggleBtn.textContent = 'Ocultar Información de Diagnóstico';
       } else {
         debugInfo.style.display = 'none';
+        toggleBtn.textContent = 'Mostrar Información de Diagnóstico';
       }
     }
     
@@ -515,6 +524,8 @@
       ctx.setTransform(1, 0, 0, 1, 0, 0);
 
       imagenGenerada = canvas.toDataURL('image/png', 1.0);  // Máxima calidad
+      imagenRevertida = null; // Reiniciar la imagen revertida
+      imagenEstaRevertida = false; // Reiniciar el estado
 
       // Guardar en historial
       const ahora = new Date();
@@ -619,33 +630,72 @@
       }
     }
 
-    function revertirImagen() {
+    // Nueva función para alternar entre imagen normal y revertida
+    function toggleRevertirImagen() {
       const canvas = document.getElementById('canvas');
       const ctx = canvas.getContext('2d');
       const factorEscala = 4; // Usar el mismo factor de escala que en generarImagen
-
-      if (imagenGenerada) {
-        const img = new Image();
-        img.src = imagenGenerada;
-        img.onload = function () {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-          // Invertir la imagen en el eje horizontal (efecto espejo)
-          ctx.save();
-          ctx.scale(-factorEscala, factorEscala); // Escalar con el factor y mantener la inversión
-          ctx.drawImage(img, -canvas.width/factorEscala, 0, canvas.width/factorEscala, canvas.height/factorEscala); // Ajustar para la escala
-          ctx.restore();
-          
-          // Guardar la nueva versión invertida
-          imagenGenerada = canvas.toDataURL('image/png', 1.0);
-          
-          // Actualizar el enlace de descarga después de cambiar la imagen
-          configurarEnlaceDescarga();
-        };
+      
+      // Si la imagen está en estado normal, revertirla
+      if (!imagenEstaRevertida) {
+        if (imagenGenerada) {
+          const img = new Image();
+          img.src = imagenGenerada;
+          img.onload = function () {
+            // Guardar la imagen actual antes de revertirla (si no la teníamos ya)
+            if (!imagenRevertida) {
+              // Limpiar completamente el canvas
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+              
+              // Invertir la imagen en el eje horizontal (efecto espejo)
+              ctx.save();
+              ctx.scale(-factorEscala, factorEscala); // Escalar con el factor y mantener la inversión
+              ctx.drawImage(img, -canvas.width/factorEscala, 0, canvas.width/factorEscala, canvas.height/factorEscala); // Ajustar para la escala
+              ctx.restore();
+              
+              // Guardar la imagen revertida
+              imagenRevertida = canvas.toDataURL('image/png', 1.0);
+            } else {
+              // Si ya teníamos la imagen revertida, simplemente usarla
+              const imgRev = new Image();
+              imgRev.src = imagenRevertida;
+              imgRev.onload = function() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(imgRev, 0, 0);
+              };
+            }
+            
+            // Actualizar el estado
+            imagenEstaRevertida = true;
+            
+            // Actualizar el enlace de descarga
+            configurarEnlaceDescarga();
+            
+            // Actualizar el texto del botón
+            document.getElementById('revertirBtn').textContent = "Volver a Normal";
+          };
+        }
+      } 
+      // Si la imagen está revertida, volver a la normal
+      else {
+        if (imagenGenerada) {
+          const img = new Image();
+          img.src = imagenGenerada;
+          img.onload = function () {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+            
+            // Actualizar el estado
+            imagenEstaRevertida = false;
+            
+            // Actualizar el enlace de descarga
+            configurarEnlaceDescarga();
+            
+            // Actualizar el texto del botón
+            document.getElementById('revertirBtn').textContent = "Revertir Imagen";
+          };
+        }
       }
-
-      // Ocultar el botón de revertir
-      document.getElementById('revertirBtn').classList.add('hidden');
     }
 
     function renderHistorial() {
@@ -667,8 +717,7 @@
       }
       
       mostrarNotificacion("Iniciando impresión...");
-      const debugLog = "Intento de impresión con el texto: " + texto;
-      logToDebug(debugLog);
+      logToDebug("Intento de impresión con el texto: " + texto);
       
       // Guardar en historial
       const ahora = new Date();
