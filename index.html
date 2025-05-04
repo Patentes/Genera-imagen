@@ -94,30 +94,6 @@
       margin-top: 10px;
       color: #666;
     }
-    #debugInfo {
-      margin-top: 20px;
-      text-align: left;
-      background-color: #f0f0f0;
-      padding: 10px;
-      border-radius: 4px;
-      font-family: monospace;
-      font-size: 12px;
-      max-height: 200px;
-      overflow-y: auto;
-      display: none;
-    }
-    #toggleDebugBtn {
-      margin-top: 20px;
-      background-color: #607d8b;
-      color: white;
-      border: none;
-      padding: 10px 20px;
-      border-radius: 4px;
-      cursor: pointer;
-      display: block;
-      width: 100%;
-      font-size: 14px;
-    }
     /* Estilos responsive para móviles */
     @media screen and (max-width: 600px) {
       body {
@@ -126,6 +102,21 @@
       canvas {
         width: 90%;
         height: auto;
+      }
+    }
+    /* Estilos para impresión - solo el elemento a imprimir */
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      #printContent, #printContent * {
+        visibility: visible;
+      }
+      #printContent {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
       }
     }
   </style>
@@ -163,8 +154,8 @@
       <button id="sendQueueBtn" onclick="procesarColaMensajes(true)">Enviar ahora</button>
     </div>
     
-    <button id="toggleDebugBtn" onclick="toggleDebugInfo()">Mostrar Información de Diagnóstico</button>
-    <div id="debugInfo"></div>
+    <!-- Elemento oculto para imprimir -->
+    <div id="printContent" class="hidden"></div>
   </div>
 
   <div id="historial" class="hidden">
@@ -203,19 +194,12 @@
     // URL del webhook de Discord - ASEGÚRATE DE QUE ESTO SEA CORRECTO
     const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1364802693012521000/MBUF565wKk7lV_xJgy5e4JqNCOI-PYOCUm1E3VxuJt9DWQ8StrXVrQGK8IOmIa0tmfz9";
 
-    // Variables para almacenar el resultado del diagnóstico
-    let printObjectProps = []; // Propiedades del objeto print
-    let printFuncTypes = []; // Tipos de función del objeto print
-    
     // Detectar si estamos en un dispositivo Android
     const isAndroid = /Android/i.test(navigator.userAgent);
 
     window.onload = function() {
       cargarHistorial();
       cargarColaMensajes();
-      
-      // Ejecutar diagnóstico del objeto print
-      examinarPrintObject();
       
       // Verificar cola periódicamente incluso si no estás logueado
       setInterval(verificarColaPendiente, 60000); // Cada minuto
@@ -247,99 +231,6 @@
         }
       }
     };
-    
-    // Función para examinar el objeto print disponible en window
-    function examinarPrintObject() {
-      const debugInfo = document.getElementById('debugInfo');
-      debugInfo.innerHTML = "<p>Examinando objeto print en el dispositivo...</p>";
-      
-      // Información del dispositivo
-      const deviceInfo = {
-        userAgent: navigator.userAgent,
-        platform: navigator.platform,
-        isAndroid: isAndroid
-      };
-      
-      debugInfo.innerHTML += "<p>User Agent: " + deviceInfo.userAgent + "</p>";
-      debugInfo.innerHTML += "<p>Plataforma: " + deviceInfo.platform + "</p>";
-      debugInfo.innerHTML += "<p>Es Android: " + deviceInfo.isAndroid + "</p>";
-      
-      // Examinar el objeto print que fue detectado en las imágenes
-      if (typeof window.print !== 'undefined') {
-        debugInfo.innerHTML += "<p><strong>Objeto print encontrado</strong></p>";
-        
-        // Determinar si es una función o un objeto
-        if (typeof window.print === 'function') {
-          debugInfo.innerHTML += "<p>window.print es una función</p>";
-          debugInfo.innerHTML += "<p>- Método: window.print()</p>";
-          printFuncTypes.push('function');
-        } else if (typeof window.print === 'object') {
-          debugInfo.innerHTML += "<p>window.print es un objeto</p>";
-          
-          // Examinar propiedades y métodos
-          for (let prop in window.print) {
-            printObjectProps.push(prop);
-            
-            try {
-              const propType = typeof window.print[prop];
-              debugInfo.innerHTML += `<p>- Propiedad: ${prop} (${propType})</p>`;
-              
-              // Si es una función, agregar a tipos de función
-              if (propType === 'function') {
-                printFuncTypes.push(prop);
-                debugInfo.innerHTML += `<p>  <strong>✓ Posible método de impresión: ${prop}</strong></p>`;
-              }
-            } catch (e) {
-              debugInfo.innerHTML += `<p>- Error al examinar propiedad ${prop}: ${e.message}</p>`;
-            }
-          }
-          
-          if (printObjectProps.length === 0) {
-            debugInfo.innerHTML += "<p>El objeto print no tiene propiedades accesibles</p>";
-          }
-        }
-      } else {
-        debugInfo.innerHTML += "<p><strong>⚠ No se encontró el objeto print</strong></p>";
-        
-        // Buscar otras alternativas en el dispositivo
-        const objectsToCheck = [
-          'printer', 'android', 'device', 'terminal', 'pos'
-        ];
-        
-        objectsToCheck.forEach(objName => {
-          if (typeof window[objName] !== 'undefined') {
-            debugInfo.innerHTML += `<p>Encontrado objeto alternativo: ${objName}</p>`;
-            
-            // Examinar el objeto
-            try {
-              for (let prop in window[objName]) {
-                if (prop.toLowerCase().includes('print')) {
-                  debugInfo.innerHTML += `<p>- Posible método de impresión: ${objName}.${prop}</p>`;
-                }
-              }
-            } catch (e) {
-              debugInfo.innerHTML += `<p>Error al examinar ${objName}: ${e.message}</p>`;
-            }
-          }
-        });
-      }
-      
-      debugInfo.innerHTML += "<p>Diagnóstico completado.</p>";
-    }
-    
-    // Función para mostrar/ocultar información de diagnóstico
-    function toggleDebugInfo() {
-      const debugInfo = document.getElementById('debugInfo');
-      const toggleBtn = document.getElementById('toggleDebugBtn');
-      
-      if (debugInfo.style.display === 'none' || debugInfo.style.display === '') {
-        debugInfo.style.display = 'block';
-        toggleBtn.textContent = 'Ocultar Información de Diagnóstico';
-      } else {
-        debugInfo.style.display = 'none';
-        toggleBtn.textContent = 'Mostrar Información de Diagnóstico';
-      }
-    }
     
     // Verificar y procesar la cola de mensajes pendientes
     function verificarColaPendiente() {
@@ -601,7 +492,7 @@
       }
     }
 
-    // Nueva función para alternar entre imagen normal y revertida
+    // Función para alternar entre imagen normal y revertida
     function toggleRevertirImagen() {
       const canvas = document.getElementById('canvas');
       const ctx = canvas.getContext('2d');
@@ -688,7 +579,7 @@
       }
       
       mostrarNotificacion("Iniciando impresión...");
-      logToDebug("Intento de impresión con el texto: " + texto);
+      console.log("Intento de impresión con el texto: " + texto);
       
       // Guardar en historial
       const ahora = new Date();
@@ -711,204 +602,76 @@
 
       if (usuarioActual === 'admin') renderHistorial();
       
-      // 1. Intentar usar el objeto print directamente si es función (método nativo de los navegadores)
-      let impresionExitosa = false;
-      
-      if (typeof window.print === 'function') {
-        try {
-          logToDebug("Intentando usar window.print() como función directa...");
+      // Optimizado para imprimir solo una vez con el formato adecuado
+      try {
+        console.log("Usando window.print() optimizado para formato único");
+        
+        // Crear el contenido de impresión optimizado
+        const printContent = document.getElementById('printContent');
+        const canvas = document.getElementById('canvas');
+        
+        // Obtener el tamaño del texto para la impresión
+        const tamanioTexto = document.getElementById('tamanioTexto').value;
+        
+        // Configurar el contenido para impresión optimizado sólo para impresora térmica
+        printContent.innerHTML = `
+          <div style="text-align:center; padding:5px; width:100%; font-family:Arial, sans-serif;">
+            <div style="font-size:${tamanioTexto * 1.5}px; font-weight:bold; margin-bottom:10px;">${texto}</div>
+          </div>
+        `;
+        
+        // Mostrar el contenido para impresión
+        printContent.classList.remove('hidden');
+        
+        // Imprimir
+        setTimeout(() => {
+          window.print();
           
-          // Preparar página para impresión
-          const contenidoOriginal = document.body.innerHTML;
-          const canvas = document.getElementById('canvas');
-          
-          // Crear una página con solo la imagen y el texto para imprimir
-          const impresionHTML = `
-            <html>
-            <head>
-              <style>
-                body { text-align: center; margin: 0; padding: 0; }
-                img { max-width: 100%; }
-                h1 { font-size: 24px; }
-              </style>
-            </head>
-            <body>
-              <h1>${texto}</h1>
-              <img src="${canvas.toDataURL('image/png')}" alt="${texto}">
-            </body>
-            </html>
-          `;
-          
-          // Crear un iframe oculto para imprimir sin afectar la página principal
-          const iframe = document.createElement('iframe');
-          iframe.style.display = 'none';
-          document.body.appendChild(iframe);
-          
-          // Escribir el contenido en el iframe
-          iframe.contentDocument.write(impresionHTML);
-          iframe.contentDocument.close();
-          
-          // Imprimir el iframe
-          iframe.contentWindow.print();
-          
-          // Eliminar el iframe después de un tiempo
+          // Ocultar el contenido de impresión después de imprimir
           setTimeout(() => {
-            document.body.removeChild(iframe);
-          }, 1000);
+            printContent.classList.add('hidden');
+          }, 500);
           
-          impresionExitosa = true;
-          logToDebug("Impresión enviada a través de window.print()");
-        } catch (e) {
-          logToDebug("Error al usar window.print() directo: " + e.message);
-        }
-      }
-      
-      // 2. Intentar usar el objeto print si es un objeto (específico del dispositivo)
-      if (!impresionExitosa && typeof window.print === 'object') {
+          // Notificar éxito
+          mostrarNotificacion("Impresión completada");
+          enviarNotificacionInmediata(texto, "impresa");
+        }, 300);
+      } catch (e) {
+        console.error("Error al imprimir:", e);
+        mostrarError("Error al imprimir");
+        
+        // Intentar método alternativo si el principal falla
         try {
-          logToDebug("window.print es un objeto, intentando métodos específicos...");
-          
-          // Intentar diferentes métodos potenciales que podría tener el objeto print
-          const posiblesMétodos = ['print', 'printText', 'printHTML', 'printImage', 'doPrint'];
-          
-          for (let i = 0; i < posiblesMétodos.length; i++) {
-            const método = posiblesMétodos[i];
-            
-            if (typeof window.print[método] === 'function') {
-              logToDebug(`Intentando window.print.${método}...`);
-              
-              if (método === 'printImage') {
-                // Si es printImage, pasar la imagen del canvas
-                const canvas = document.getElementById('canvas');
-                const imgData = canvas.toDataURL('image/png').replace('data:image/png;base64,', '');
-                window.print[método](imgData);
-              } else {
-                // Para otros métodos, pasar el texto
-                window.print[método](texto);
-              }
-              
-              impresionExitosa = true;
-              logToDebug(`Impresión enviada a través de window.print.${método}`);
-              break;
-            }
-          }
-        } catch (e) {
-          logToDebug("Error al usar métodos de window.print: " + e.message);
-        }
-      }
-      
-      // 3. Enfoque específico para dispositivos Android con print como objeto global
-      if (!impresionExitosa && isAndroid) {
-        try {
-          logToDebug("Intentando enfoque específico para Android...");
-          
-          // En algunos dispositivos Android, print puede ser invocado de formas no estándar
-          // Probar invocación directa si es posible
-          if (typeof print !== 'undefined') {
-            logToDebug("Usando objeto global 'print'");
-            
-            try {
-              // Intento 1: llamarlo como función
-              if (typeof print === 'function') {
-                print(texto);
-                impresionExitosa = true;
-                logToDebug("Impresión enviada a través de print() global");
-              } 
-              // Intento 2: como objeto con métodos
-              else if (typeof print === 'object') {
-                // Probar el acceso al objeto print directamente en la consola
-                console.log("Objeto print disponible:", print);
-                
-                // Intentar detectar métodos
-                for (let prop in print) {
-                  console.log(` - Propiedad: ${prop} (${typeof print[prop]})`);
-                  
-                  // Si encontramos algún método que parezca de impresión, usarlo
-                  if (typeof print[prop] === 'function' && 
-                     (prop.toLowerCase().includes('print') || 
-                      prop.toLowerCase().includes('texto') || 
-                      prop.toLowerCase().includes('text'))) {
-                    
-                    logToDebug(`Intentando print.${prop}...`);
-                    print[prop](texto);
-                    impresionExitosa = true;
-                    logToDebug(`Impresión enviada a través de print.${prop}`);
-                    break;
-                  }
-                }
-              }
-            } catch (innerError) {
-              logToDebug("Error al invocar print global: " + innerError.message);
-            }
-          }
-        } catch (e) {
-          logToDebug("Error en enfoque específico para Android: " + e.message);
-        }
-      }
-      
-      // 4. Último recurso: Crear un elemento iframe para imprimir con la impresora del sistema
-      if (!impresionExitosa) {
-        try {
-          logToDebug("Intentando enfoque de iframe como último recurso...");
-          
-          // Crear un iframe con el contenido a imprimir
+          // Crear un iframe para imprimir
           const iframe = document.createElement('iframe');
           iframe.style.display = 'none';
           document.body.appendChild(iframe);
           
-          // Escribir el contenido al iframe
+          // Configurar contenido del iframe
           const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
           iframeDoc.body.innerHTML = `
-            <div style="text-align:center; padding:20px;">
-              <h1 style="font-size:36px;">${texto}</h1>
-              <img src="${document.getElementById('canvas').toDataURL('image/png')}" 
-                   style="max-width:100%;" />
+            <div style="text-align:center; padding:0; margin:0;">
+              <div style="font-size:36px; font-weight:bold;">${texto}</div>
             </div>
           `;
           
-          // Intentar imprimir usando el iframe
-          if (iframe.contentWindow.print) {
-            iframe.contentWindow.print();
-            impresionExitosa = true;
-            logToDebug("Impresión enviada a través de iframe.contentWindow.print()");
-          }
-          
-          // Eliminar el iframe después de un tiempo
+          // Imprimir el iframe
           setTimeout(() => {
-            document.body.removeChild(iframe);
-          }, 1000);
-          
-        } catch (e) {
-          logToDebug("Error con enfoque de iframe: " + e.message);
+            iframe.contentWindow.print();
+            
+            // Limpiar
+            setTimeout(() => {
+              document.body.removeChild(iframe);
+            }, 500);
+            
+            mostrarNotificacion("Impresión completada");
+            enviarNotificacionInmediata(texto, "impresa");
+          }, 300);
+        } catch (e2) {
+          console.error("Error en método alternativo:", e2);
+          mostrarError("No se pudo imprimir");
         }
       }
-      
-      // Verificar el resultado final
-      if (impresionExitosa) {
-        mostrarNotificacion("Impresión enviada");
-        enviarNotificacionInmediata(texto, "impresa");
-      } else {
-        mostrarError("No se pudo acceder a la impresora");
-        logToDebug("Fallaron todos los métodos de impresión intentados");
-        
-        // Simular impresión (sólo mostrar mensaje)
-        setTimeout(() => {
-          mostrarNotificacion("Impresión simulada completada");
-          enviarNotificacionInmediata(texto, "impresa (simulación)");
-        }, 1500);
-      }
-    }
-    
-    // Función para agregar un mensaje a la información de diagnóstico
-    function logToDebug(message) {
-      const debugInfo = document.getElementById('debugInfo');
-      const now = new Date();
-      const timestamp = now.toTimeString().split(' ')[0] + '.' + now.getMilliseconds().toString().padStart(3, '0');
-      debugInfo.innerHTML += `<p>[${timestamp}] ${message}</p>`;
-      console.log(`[DEBUG] ${message}`);
-      
-      // Auto-scroll al final
-      debugInfo.scrollTop = debugInfo.scrollHeight;
     }
     
     // Nueva función para envío inmediato de notificaciones con tipo de acción
