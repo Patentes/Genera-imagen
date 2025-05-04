@@ -34,8 +34,8 @@
       padding: 5px;
       border: 1px solid #ddd;
     }
-    #app, #historial {
-      display: none; /* Inicialmente ocultos */
+    .hidden {
+      display: none;
     }
     #historialTabla td, #historialTabla th {
       padding: 8px;
@@ -85,8 +85,16 @@
       margin-top: 10px;
       color: #666;
     }
-    #revertirBtn {
-      display: none; /* Inicialmente oculto */
+    /* Estilos para botón imprimir */
+    #imprimirBtn {
+      display: inline-block;
+      background-color: #2196F3;
+      color: white;
+      padding: 10px 20px;
+      text-decoration: none;
+      border-radius: 4px;
+      margin-top: 10px;
+      margin-left: 10px;
     }
     /* Estilos responsive para móviles */
     @media screen and (max-width: 600px) {
@@ -98,17 +106,41 @@
         height: auto;
       }
     }
+    .config-section {
+      border: 1px solid #ddd;
+      padding: 10px;
+      margin: 10px 0;
+      background-color: #f9f9f9;
+      border-radius: 5px;
+      text-align: left;
+    }
+    .config-section h3 {
+      margin-top: 0;
+    }
+    .print-options {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+    }
+    .print-option {
+      width: 48%;
+      margin-bottom: 10px;
+    }
+    .print-option label {
+      display: block;
+      margin-bottom: 5px;
+    }
   </style>
 </head>
 <body>
-  <div id="loginPanel">
+  <div id="login">
     <h2>Iniciar Sesión</h2>
     <input type="text" id="user" placeholder="Usuario"><br>
     <input type="password" id="pass" placeholder="Contraseña"><br>
     <button onclick="login()">Entrar</button>
   </div>
 
-  <div id="app">
+  <div id="app" class="hidden">
     <h1>Generador de Imagen para Impresión</h1>
     <p>Bienvenido, <span id="nombreUsuario"></span></p>
     <input type="text" id="texto" placeholder="Escribe aquí letras o número">
@@ -118,22 +150,53 @@
     <input type="range" id="tamanioTexto" min="10" max="100" value="24">
     <br>
     <button onclick="generarImagen()">Generar Imagen</button>
-    <button onclick="revertirImagen()" id="revertirBtn">Revertir Imagen</button>
+    <button onclick="imprimirDirecto()" id="imprimirBtn">Imprimir Directamente</button>
+    <button onclick="revertirImagen()" id="revertirBtn" class="hidden">Revertir Imagen</button>
     <br>
     <div id="canvasContainer">
       <canvas id="canvas" width="200" height="100"></canvas>
     </div>
     <br>
-    <a id="descargarBtn" download="patente.png" style="display: none;">Descargar Imagen</a>
+    <a id="descargarBtn" download="patente.png" class="hidden">Descargar Imagen</a>
+    
+    <div class="config-section" id="configuracionImpresora">
+      <h3>Configuración de Impresora</h3>
+      <div class="print-options">
+        <div class="print-option">
+          <label for="anchoImpresion">Ancho de impresión (mm):</label>
+          <input type="number" id="anchoImpresion" value="58" min="40" max="80">
+        </div>
+        <div class="print-option">
+          <label for="densidadImpresion">Densidad:</label>
+          <select id="densidadImpresion">
+            <option value="0">Normal</option>
+            <option value="1">Media</option>
+            <option value="2">Alta</option>
+          </select>
+        </div>
+        <div class="print-option">
+          <label for="tipoImpresora">Tipo de Impresora:</label>
+          <select id="tipoImpresora">
+            <option value="sunmi">Sunmi</option>
+            <option value="nativo">Android Nativo</option>
+          </select>
+        </div>
+        <div class="print-option">
+          <label for="cortarPapel">Cortar papel:</label>
+          <input type="checkbox" id="cortarPapel" checked>
+        </div>
+      </div>
+    </div>
+    
     <div id="notificacion" class="notification">Notificación enviada a Discord</div>
     <div id="errorNotificacion" class="notification error-notification">Error al enviar notificación</div>
-    <div id="queueStatus" style="display: none;">
+    <div id="queueStatus" class="hidden">
       Notificaciones pendientes: <span id="queueCount">0</span>
       <button id="sendQueueBtn" onclick="procesarColaMensajes(true)">Enviar ahora</button>
     </div>
   </div>
 
-  <div id="historial">
+  <div id="historial" class="hidden">
     <h2>Historial de impresiones</h2>
     <div style="overflow-x: auto;">
       <table id="historialTabla"></table>
@@ -167,10 +230,14 @@
     // URL del webhook de Discord - ASEGÚRATE DE QUE ESTO SEA CORRECTO
     const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1364802693012521000/MBUF565wKk7lV_xJgy5e4JqNCOI-PYOCUm1E3VxuJt9DWQ8StrXVrQGK8IOmIa0tmfz9";
 
+    // Detectar si estamos en un POS Q2i con Android
+    let isPosDevice = false;
+    let sunmiPrinter = null;
+
     window.onload = function() {
-      // Cargar datos (desde memoria)
       cargarHistorial();
       cargarColaMensajes();
+      detectarDispositivo();
       
       // Verificar cola periódicamente incluso si no estás logueado
       setInterval(verificarColaPendiente, 60000); // Cada minuto
@@ -182,35 +249,348 @@
       const canvas = document.getElementById('canvas');
       if (canvas) {
         canvas.style.backgroundColor = "#FFFFFF";
-        try {
-          const ctx = canvas.getContext('2d', { alpha: false });
-          ctx.fillStyle = "#FFFFFF";
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-        } catch (e) {
-          console.warn("No se pudo configurar el canvas: ", e);
+        const ctx = canvas.getContext('2d', { alpha: false });
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      
+      // Verificar si hay usuario guardado
+      const usuarioGuardado = localStorage.getItem('usuarioActual');
+      if (usuarioGuardado) {
+        usuarioActual = usuarioGuardado;
+        document.getElementById('login').classList.add('hidden');
+        document.getElementById('app').classList.remove('hidden');
+        document.getElementById('nombreUsuario').textContent = usuarioActual;
+        if (usuarioActual === 'admin') {
+          document.getElementById('historial').classList.remove('hidden');
+          renderHistorial();
+          document.getElementById('configuracionImpresora').classList.remove('hidden');
+        } else {
+          document.getElementById('historial').classList.add('hidden');
+          document.getElementById('configuracionImpresora').classList.add('hidden');
         }
       }
       
-      // Verificar si hay usuario guardado en memoria
-      if (memoriaUsuario && users[memoriaUsuario]) {
-        usuarioActual = memoriaUsuario;
-        // Usar style.display
-        document.getElementById('loginPanel').style.display = 'none';
-        document.getElementById('app').style.display = 'block';
-        document.getElementById('nombreUsuario').textContent = usuarioActual;
-        
-        if (usuarioActual === 'admin') {
-          document.getElementById('historial').style.display = 'block';
-          try {
-            renderHistorial();
-          } catch (e) {
-            console.warn("Error al renderizar historial:", e);
+      // Cargar configuraciones de impresora
+      cargarConfiguracionImpresora();
+    };
+    
+    // Función para detectar si estamos en un dispositivo POS
+    function detectarDispositivo() {
+      // Verificar si estamos en Android
+      const userAgent = navigator.userAgent.toLowerCase();
+      const isAndroid = userAgent.indexOf("android") > -1;
+      
+      if (isAndroid) {
+        try {
+          // Intentar detectar la API de impresora Sunmi (común en dispositivos POS Q2i)
+          if (window.sunmi || window.woyou || window.SunmiPrinter) {
+            isPosDevice = true;
+            sunmiPrinter = window.sunmi || window.woyou || window.SunmiPrinter;
+            console.log("Detectado dispositivo POS con impresora Sunmi");
+            document.getElementById('imprimirBtn').classList.remove('hidden');
+          } 
+          // Para API nativa de Android (también común en estos dispositivos)
+          else if (window.android && window.android.printText) {
+            isPosDevice = true;
+            console.log("Detectado dispositivo POS con API de impresión nativa");
+            document.getElementById('imprimirBtn').classList.remove('hidden');
+          } else {
+            // Para otros métodos de detección, verificar interfaces WebUSB o WebBluetooth
+            navigator.usb && navigator.usb.getDevices()
+              .then(devices => {
+                const printerDevices = devices.filter(device => 
+                  device.productName && device.productName.toLowerCase().includes('printer'));
+                
+                if (printerDevices.length > 0) {
+                  isPosDevice = true;
+                  console.log("Detectada impresora USB");
+                  document.getElementById('imprimirBtn').classList.remove('hidden');
+                }
+              })
+              .catch(err => console.error("Error al detectar dispositivos USB:", err));
           }
-        } else {
-          document.getElementById('historial').style.display = 'none';
+        } catch (error) {
+          console.error("Error al detectar impresora:", error);
         }
       }
-    };
+      
+      // Mostrar/Ocultar botón de impresión directa según dispositivo
+      if (isPosDevice) {
+        document.getElementById('imprimirBtn').style.display = 'inline-block';
+      } else {
+        // Para pruebas, siempre mostramos el botón aunque simule la impresión
+        document.getElementById('imprimirBtn').style.display = 'inline-block';
+        console.log("No se detectó impresora térmica. El botón de impresión simulará la acción.");
+      }
+    }
+    
+    // Función para guardar configuración de impresora
+    function guardarConfiguracionImpresora() {
+      const config = {
+        ancho: document.getElementById('anchoImpresion').value,
+        densidad: document.getElementById('densidadImpresion').value,
+        tipo: document.getElementById('tipoImpresora').value,
+        cortar: document.getElementById('cortarPapel').checked
+      };
+      
+      localStorage.setItem('configuracionImpresora', JSON.stringify(config));
+    }
+    
+    // Función para cargar configuración de impresora
+    function cargarConfiguracionImpresora() {
+      try {
+        const configGuardada = localStorage.getItem('configuracionImpresora');
+        if (configGuardada) {
+          const config = JSON.parse(configGuardada);
+          document.getElementById('anchoImpresion').value = config.ancho || 58;
+          document.getElementById('densidadImpresion').value = config.densidad || 0;
+          document.getElementById('tipoImpresora').value = config.tipo || 'sunmi';
+          document.getElementById('cortarPapel').checked = config.cortar !== undefined ? config.cortar : true;
+        }
+      } catch (error) {
+        console.error("Error al cargar configuración de impresora:", error);
+      }
+    }
+    
+    // Función principal para imprimir directamente en el POS
+    function imprimirDirecto() {
+      const texto = document.getElementById('texto').value;
+      if (!texto) {
+        alert("Por favor ingresa un texto para imprimir");
+        return;
+      }
+      
+      // Guardar configuración actual
+      guardarConfiguracionImpresora();
+      
+      // Obtener canvas y configuración
+      const canvas = document.getElementById('canvas');
+      const config = {
+        ancho: parseInt(document.getElementById('anchoImpresion').value),
+        densidad: parseInt(document.getElementById('densidadImpresion').value),
+        tipo: document.getElementById('tipoImpresora').value,
+        cortar: document.getElementById('cortarPapel').checked
+      };
+      
+      // Guardar en historial
+      registrarEnHistorial(texto);
+      
+      // Intentar imprimir según el dispositivo detectado
+      if (isPosDevice) {
+        try {
+          // Mostrar notificación de impresión iniciada
+          mostrarNotificacion("Imprimiendo...");
+          
+          // Actualizar la imagen del canvas antes de imprimir
+          generarImagenParaImprimir(texto, function() {
+            // Convertir canvas a imagen para imprimir
+            const imageData = canvas.toDataURL('image/png').replace('data:image/png;base64,', '');
+            
+            // Imprimir según el tipo de impresora configurado
+            if (config.tipo === 'sunmi' && sunmiPrinter) {
+              // Imprimir con API Sunmi
+              sunmiPrinter.printBitmap(imageData, config.ancho, config.densidad);
+              
+              if (config.cortar) {
+                sunmiPrinter.cutPaper();
+              }
+              
+              // Enviar notificación de éxito
+              mostrarNotificacion("Impresión completada");
+              enviarNotificacionInmediata(texto, "impresa");
+            }
+            else if (window.android && window.android.printImage) {
+              // Imprimir con API nativa de Android
+              window.android.printImage(imageData, config.ancho, config.densidad);
+              
+              if (config.cortar && window.android.cutPaper) {
+                window.android.cutPaper();
+              }
+              
+              // Enviar notificación de éxito
+              mostrarNotificacion("Impresión completada");
+              enviarNotificacionInmediata(texto, "impresa");
+            }
+            else {
+              // Método alternativo - WebUSB
+              imprimirViaWebUSB(canvas, config)
+                .then(() => {
+                  mostrarNotificacion("Impresión completada");
+                  enviarNotificacionInmediata(texto, "impresa");
+                })
+                .catch(error => {
+                  console.error("Error al imprimir vía WebUSB:", error);
+                  mostrarError("Error de impresión. Usando simulación.");
+                  simularImpresion(texto);
+                });
+            }
+          });
+        } catch (error) {
+          console.error("Error al imprimir:", error);
+          mostrarError("Error de impresión. Usando simulación.");
+          simularImpresion(texto);
+        }
+      } else {
+        // Si no es dispositivo POS, simular la impresión
+        simularImpresion(texto);
+      }
+    }
+    
+    // Función para generar imagen optimizada para impresión
+    function generarImagenParaImprimir(texto, callback) {
+      const tamanio = document.getElementById('tamanioTexto').value;
+      const canvas = document.getElementById('canvas');
+      
+      // Actualizar tamaño para impresión térmica (optimizado para 58mm)
+      const ancho = parseInt(document.getElementById('anchoImpresion').value);
+      canvas.width = ancho * 8; // 8 pixels por mm es un buen estándar para impresoras térmicas
+      canvas.height = 100;
+      
+      // Mantener el tamaño visual en la página mediante CSS
+      canvas.style.width = "200px";
+      canvas.style.height = "100px";
+      
+      const ctx = canvas.getContext('2d', { alpha: false });
+      
+      // Limpiar completamente el canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Fondo blanco
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Configurar texto
+      ctx.fillStyle = "#000000";
+      ctx.font = `bold ${tamanio}px Arial`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      
+      // Dibujar texto
+      ctx.fillText(texto, canvas.width / 2, canvas.height / 2);
+      
+      // Guardar la imagen generada
+      imagenGenerada = canvas.toDataURL('image/png', 1.0);
+      
+      // Habilitar botón de descarga
+      const enlace = document.getElementById('descargarBtn');
+      enlace.classList.remove('hidden');
+      enlace.textContent = "Descargar Imagen";
+      configurarEnlaceDescarga();
+      
+      // Callback después de generar la imagen
+      if (typeof callback === 'function') {
+        callback();
+      }
+    }
+    
+    // Simulación de impresión para dispositivos no-POS
+    function simularImpresion(texto) {
+      // Generar la imagen primero
+      generarImagenParaImprimir(texto, function() {
+        // Mostrar una notificación de "imprimiendo"
+        mostrarNotificacion("Simulando impresión...");
+        
+        // Simular un tiempo de impresión
+        setTimeout(function() {
+          mostrarNotificacion("Impresión completada (simulación)");
+          
+          // Enviar notificación a Discord
+          enviarNotificacionInmediata(texto, "impresa (simulación)");
+        }, 1500);
+      });
+    }
+    
+    // Función para imprimir mediante WebUSB (alternativa para dispositivos compatibles)
+    async function imprimirViaWebUSB(canvas, config) {
+      try {
+        // Solicitar acceso a dispositivos USB
+        const devices = await navigator.usb.requestDevice({
+          filters: [{ classCode: 7 }] // Clase USB para impresoras
+        });
+        
+        if (!devices) {
+          throw new Error("No se encontró ninguna impresora USB");
+        }
+        
+        // Abrir conexión
+        await devices.open();
+        await devices.selectConfiguration(1);
+        await devices.claimInterface(0);
+        
+        // Convertir canvas a comandos ESC/POS para impresora térmica
+        const imageData = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+        const commands = convertirImagenAComandosESCPOS(imageData, config);
+        
+        // Enviar comandos a la impresora
+        await devices.transferOut(1, commands);
+        
+        // Cerrar conexión
+        await devices.close();
+        
+        return true;
+      } catch (error) {
+        console.error("Error en WebUSB:", error);
+        throw error;
+      }
+    }
+    
+    // Función para convertir imagen a comandos ESC/POS
+    function convertirImagenAComandosESCPOS(imageData, config) {
+      // Esta es una implementación simplificada - en un entorno real 
+      // se necesitaría una biblioteca completa para generar comandos ESC/POS
+      
+      // Inicializar array de bytes para comandos
+      const commands = new Uint8Array(1024); // Tamaño inicial
+      let position = 0;
+      
+      // Comandos de inicialización
+      const initCmd = [0x1B, 0x40]; // ESC @
+      initCmd.forEach(cmd => {
+        commands[position++] = cmd;
+      });
+      
+      // Establecer densidad de impresión
+      const densityCmd = [0x1D, 0x7C, config.densidad]; // GS | n
+      densityCmd.forEach(cmd => {
+        commands[position++] = cmd;
+      });
+      
+      // Comando de corte si está habilitado
+      if (config.cortar) {
+        const cutCmd = [0x1D, 0x56, 0x00]; // GS V 0
+        cutCmd.forEach(cmd => {
+          commands[position++] = cmd;
+        });
+      }
+      
+      // Los comandos de impresión de imagen completos requerirían procesamiento adicional
+      // Se retorna una versión simple para demostración
+      return commands.slice(0, position);
+    }
+    
+    // Función para registrar en historial
+    function registrarEnHistorial(texto) {
+      const ahora = new Date();
+      const nuevoRegistro = {
+        usuario: usuarioActual,
+        texto: texto,
+        fecha: ahora.toLocaleDateString(),
+        hora: ahora.toLocaleTimeString(),
+        tipo: "impresión"
+      };
+      
+      historial.push(nuevoRegistro);
+      
+      // Guardar en localStorage
+      try {
+        localStorage.setItem('historialPatentes', JSON.stringify(historial));
+      } catch (error) {
+        console.error("Error al guardar en localStorage:", error);
+      }
+
+      if (usuarioActual === 'admin') renderHistorial();
+    }
     
     // Verificar y procesar la cola de mensajes pendientes
     function verificarColaPendiente() {
@@ -232,54 +612,54 @@
       actualizarEstadoCola();
     });
 
-    // Función para guardar la cola de mensajes
-    function guardarColaMensajes() {
-      // Almacenar solo en memoria para evitar errores
-      memoriaColaMensajes = colaMensajes;
-      actualizarEstadoCola();
-    }
-    
-    // Función para guardar en historial
-    function guardarHistorial(nuevoRegistro) {
-      historial.push(nuevoRegistro);
-      
-      // Almacenar solo en memoria para evitar errores
-      memoriaHistorial = historial;
-      
-      if (usuarioActual === 'admin') renderHistorial();
-    }
-    
-    // Función para cargar el historial
+    // Función para cargar el historial desde localStorage
     function cargarHistorial() {
-      // Usar historial en memoria
-      historial = memoriaHistorial || [];
+      try {
+        const historialGuardado = localStorage.getItem('historialPatentes');
+        if (historialGuardado) {
+          historial = JSON.parse(historialGuardado);
+        }
+      } catch (error) {
+        console.error("Error al cargar historial:", error);
+        historial = [];
+      }
     }
 
-    // Función para cargar la cola de mensajes
+    // Función para cargar la cola de mensajes desde localStorage
     function cargarColaMensajes() {
-      // Usar cola en memoria
-      colaMensajes = memoriaColaMensajes || [];
-      actualizarEstadoCola();
+      try {
+        const colaGuardada = localStorage.getItem('colaMensajesDiscord');
+        if (colaGuardada) {
+          colaMensajes = JSON.parse(colaGuardada);
+          actualizarEstadoCola();
+        }
+      } catch (error) {
+        console.error("Error al cargar cola de mensajes:", error);
+        colaMensajes = [];
+      }
     }
     
-    // Variables para almacenamiento en memoria (no persistente)
-    let memoriaUsuario = null;
-    let memoriaHistorial = [];
-    let memoriaColaMensajes = [];
+    // Función para guardar la cola de mensajes en localStorage
+    function guardarColaMensajes() {
+      try {
+        localStorage.setItem('colaMensajesDiscord', JSON.stringify(colaMensajes));
+        actualizarEstadoCola();
+      } catch (error) {
+        console.error("Error al guardar cola de mensajes:", error);
+      }
+    }
     
-    // Deshabilitar completamente el almacenamiento persistente para evitar errores
-    const USE_ONLY_MEMORY_STORAGE = true;
-    
+    // Función para actualizar la visualización del estado de la cola
     function actualizarEstadoCola() {
       const queueStatus = document.getElementById('queueStatus');
       const queueCount = document.getElementById('queueCount');
       
       if (queueStatus && queueCount) {
         if (colaMensajes.length > 0) {
-          queueStatus.style.display = 'block';
+          queueStatus.classList.remove('hidden');
           queueCount.textContent = colaMensajes.length;
         } else {
-          queueStatus.style.display = 'none';
+          queueStatus.classList.add('hidden');
         }
       }
     }
@@ -287,33 +667,27 @@
     function login() {
       const u = document.getElementById('user').value;
       const p = document.getElementById('pass').value;
-      
-      if (!u || !p) {
-        alert('Por favor ingresa usuario y contraseña');
-        return;
-      }
-      
       if (users[u] && users[u] === p) {
         usuarioActual = u;
+        // Guardar usuario en localStorage para mantener la sesión
+        localStorage.setItem('usuarioActual', usuarioActual);
         
-        // Guardar usuario solo en memoria
-        memoriaUsuario = usuarioActual;
-        
-        // Mostrar/ocultar elementos usando style.display
-        document.getElementById('loginPanel').style.display = 'none';
-        document.getElementById('app').style.display = 'block';
+        document.getElementById('login').classList.add('hidden');
+        document.getElementById('app').classList.remove('hidden');
         document.getElementById('nombreUsuario').textContent = usuarioActual;
-        
         if (usuarioActual === 'admin') {
-          document.getElementById('historial').style.display = 'block';
+          document.getElementById('historial').classList.remove('hidden');
+          document.getElementById('configuracionImpresora').classList.remove('hidden');
           renderHistorial();
         } else {
-          document.getElementById('historial').style.display = 'none';
+          document.getElementById('historial').classList.add('hidden');
+          document.getElementById('configuracionImpresora').classList.add('hidden');
         }
         
         // Verificar cola de mensajes al iniciar sesión
         actualizarEstadoCola();
         if (navigator.onLine && colaMensajes.length > 0) {
+          // Envío inmediato sin delay
           procesarColaMensajes(true);
         }
       } else {
@@ -383,19 +757,32 @@
         hora: ahora.toLocaleTimeString()
       };
       
-      // Usar la nueva función de guardar historial
-      guardarHistorial(nuevoRegistro);
+      historial.push(nuevoRegistro);
+      
+      // Guardar en localStorage
+      try {
+        localStorage.setItem('historialPatentes', JSON.stringify(historial));
+      } catch (error) {
+        console.error("Error al guardar en localStorage:", error);
+      }
+
+      if (usuarioActual === 'admin') renderHistorial();
 
       // Habilitar descarga
       const enlace = document.getElementById('descargarBtn');
-      enlace.style.display = 'inline-block';
+      enlace.classList.remove('hidden');
       enlace.textContent = "Descargar Imagen";
 
       // Configurar el enlace de descarga
       configurarEnlaceDescarga();
 
       // Mostrar botón de revertir
-      document.getElementById('revertirBtn').style.display = 'inline-block';
+      document.getElementById('revertirBtn').classList.remove('hidden');
+      
+      // MODIFICACIÓN: Imprimir automáticamente después de generar la imagen
+      if (isPosDevice) {
+        imprimirDirecto();
+      }
     }
 
     function configurarEnlaceDescarga() {
@@ -446,7 +833,7 @@
           
           // Enviar notificación inmediatamente
           const textoPatente = document.getElementById('texto').value;
-          enviarNotificacionInmediata(textoPatente);
+          enviarNotificacionInmediata(textoPatente, "descargada");
           
           return true;
         });
@@ -458,7 +845,7 @@
           
           // Enviar notificación a Discord inmediatamente
           const textoPatente = document.getElementById('texto').value;
-          enviarNotificacionInmediata(textoPatente);
+          enviarNotificacionInmediata(textoPatente, "descargada");
           
           // Permitir que la descarga continúe normalmente
           return true;
@@ -497,21 +884,22 @@
 
     function renderHistorial() {
       const tabla = document.getElementById('historialTabla');
-      tabla.innerHTML = '<tr><th>Usuario</th><th>Texto</th><th>Fecha</th><th>Hora</th></tr>';
+      tabla.innerHTML = '<tr><th>Usuario</th><th>Texto</th><th>Fecha</th><th>Hora</th><th>Tipo</th></tr>';
       historial.forEach(item => {
-        const fila = `<tr><td>${item.usuario}</td><td>${item.texto}</td><td>${item.fecha}</td><td>${item.hora}</td></tr>`;
+        const tipo = item.tipo || "imagen";
+        const fila = `<tr><td>${item.usuario}</td><td>${item.texto}</td><td>${item.fecha}</td><td>${item.hora}</td><td>${tipo}</td></tr>`;
         tabla.innerHTML += fila;
       });
     }
     
-    // Nueva función para envío inmediato de notificaciones
-    function enviarNotificacionInmediata(textoPatente) {
+    // Nueva función para envío inmediato de notificaciones con tipo de acción
+    function enviarNotificacionInmediata(textoPatente, accion = "descargada") {
       // Usar el usuario actual o 'Anónimo' si no hay sesión iniciada
       const usuario = usuarioActual || 'Anónimo';
       
       // Crear el mensaje para Discord - Formato simple para mayor compatibilidad
       const mensaje = {
-        content: `¡Nueva patente descargada! Usuario: ${usuario}, Texto: ${textoPatente}, Fecha: ${new Date().toLocaleString()}`
+        content: `¡Nueva patente ${accion}! Usuario: ${usuario}, Texto: ${textoPatente}, Fecha: ${new Date().toLocaleString()}`
       };
       
       // Si no hay conexión, añadir a la cola
@@ -561,9 +949,9 @@
     }
     
     // Función para enviar notificación a Discord o ponerla en cola
-    function enviarNotificacionDiscord(textoPatente) {
+    function enviarNotificacionDiscord(textoPatente, accion = "descargada") {
       // Esta función ahora simplemente redirige a la función de envío inmediato
-      enviarNotificacionInmediata(textoPatente);
+      enviarNotificacionInmediata(textoPatente, accion);
     }
     
     // Función para agregar un mensaje a la cola
