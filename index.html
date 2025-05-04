@@ -369,8 +369,8 @@
       // Escalar el contexto para compensar el aumento de resolución
       ctx.scale(factorEscala, factorEscala);
       
-      // Ajuste para mejorar la nitidez de la fuente
-      ctx.font = `${tamanio}px Arial`;
+      // Ajuste para mejorar la nitidez de la fuente - SIN NEGRITA (normal)
+      ctx.font = `normal ${tamanio}px Arial`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillStyle = "#000000"; // Negro puro para el texto
@@ -608,7 +608,7 @@
         // Guardar el contenido original
         const contenidoOriginal = document.body.innerHTML;
         
-        // Configurar una página temporal para impresión
+        // Configurar una página temporal para impresión - SIN NEGRITA (font-weight normal)
         const contenidoImpresion = `
           <html>
           <head>
@@ -625,7 +625,7 @@
               .texto-grande {
                 font-family: Arial, sans-serif;
                 font-size: 36pt;
-                font-weight: bold;
+                font-weight: normal; /* Quitamos el bold */
                 margin: 20px 0;
               }
             </style>
@@ -669,9 +669,9 @@
         try {
           // Usar print directo
           if (typeof window.print === 'function') {
-            // Crear un elemento oculto con solo el texto
+            // Crear un elemento oculto con solo el texto - SIN NEGRITA
             const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = `<div style="text-align:center; font-size:36pt; font-weight:bold;">${texto}</div>`;
+            tempDiv.innerHTML = `<div style="text-align:center; font-size:36pt; font-weight:normal;">${texto}</div>`;
             tempDiv.style.display = 'none';
             document.body.appendChild(tempDiv);
             
