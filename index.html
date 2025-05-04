@@ -151,7 +151,31 @@
           generarImagen();
         }
       });
+      
+      // Cargar capacidades de impresión sin intent
+      cargarCapacidadesImpresion();
     };
+    
+    // Función para cargar capacidades de impresión nativamente
+    function cargarCapacidadesImpresion() {
+      // Evitar cualquier inicialización que pueda pedir inicio de sesión en Google Play
+      console.log("Inicializando capacidades de impresión sin acceso a Google Play");
+      
+      // Opciones especiales específicas para P716QJ-E1X
+      try {
+        // Inicializar directamente el servicio nativo
+        if (window.android && window.android.initPrinter) {
+          console.log("Iniciando servicio de impresora nativo");
+          window.android.initPrinter();
+        }
+        else if (window.P716QJ && window.P716QJ.init) {
+          console.log("Iniciando servicio de impresora P716QJ");
+          window.P716QJ.init();
+        }
+      } catch (e) {
+        console.log("Info: No se necesita inicialización especial para la impresora");
+      }
+    }
     
     // Función específica para buscar impresora en Q2i P716QJ-E1X
     function buscarImpresoraQ2i() {
@@ -409,7 +433,7 @@
       });
     }
     
-    // Función especializada para imprimir en Q2i P716QJ-E1X
+    // Función especializada para imprimir en Q2i P716QJ-E1X sin Google Play
     function imprimirEnQ2i(texto) {
       console.log("Imprimiendo texto:", texto);
       
@@ -421,154 +445,112 @@
         let impresionExitosa = false;
         
         // ==========================================
-        // MÉTODO 1: Usando IntentOS para dispositivos Q2i
+        // MÉTODO DIRECTO: Android WebView PrintManager
+        // ==========================================
+        // Este es el método más directo y menos probable que active Google Play
+        if (!impresionExitosa) {
+          try {
+            console.log("Intentando método directo del SDK nativo de Android");
+            
+            // Intentando acceder al objeto de impresión nativo de Android WebView
+            // Este método NO debería solicitar inicio de sesión en Google Play
+            if (window.android && window.android.printText) {
+              console.log("Usando android.printText");
+              window.android.printText(texto);
+              impresionExitosa = true;
+            } else if (window.android && window.android.print) {
+              console.log("Usando android.print");
+              window.android.print(texto);
+              impresionExitosa = true;
+            } else if (window.printer && window.printer.print) {
+              console.log("Usando printer.print");
+              window.printer.print(texto);
+              impresionExitosa = true;
+            } else if (window.printer && window.printer.printText) {
+              console.log("Usando printer.printText");
+              window.printer.printText(texto);
+              impresionExitosa = true;
+            }
+            
+            if (impresionExitosa) {
+              mostrarNotificacion("Impresión enviada directamente al dispositivo");
+            }
+          } catch (e) {
+            console.error("Error en método directo:", e);
+          }
+        }
+        
+        // ==========================================
+        // MÉTODO ESPECÍFICO PARA Q2i: APIs nativas
         // ==========================================
         if (!impresionExitosa) {
           try {
-            console.log("Intentando imprimir vía actividad nativa (IntentOS)");
+            console.log("Intentando acceso nativo a Q2i");
             
-            // Crear un iframe oculto para invocar el esquema intent://
-            const intentFrame = document.createElement('iframe');
-            intentFrame.style.display = 'none';
-            // Esquema específico para Q2i con impresora térmica
-            intentFrame.src = `intent://print?text=${encodeURIComponent(texto)}&size=${tamanio}#Intent;scheme=q2printer;package=com.q2i.printer;end`;
-            document.body.appendChild(intentFrame);
-            
-            // Eliminar el iframe después de un segundo
-            setTimeout(() => {
-              document.body.removeChild(intentFrame);
-            }, 1000);
-            
-            impresionExitosa = true;
-            mostrarNotificacion("Solicitud de impresión enviada al sistema");
+            if (window.Q2i && window.Q2i.printer) {
+              if (window.Q2i.printer.print) {
+                console.log("Usando Q2i.printer.print");
+                window.Q2i.printer.print(texto);
+                impresionExitosa = true;
+              } else if (window.Q2i.printer.printText) {
+                console.log("Usando Q2i.printer.printText");
+                window.Q2i.printer.printText(texto);
+                impresionExitosa = true;
+              }
+            } else if (window.P716QJ) {
+              if (typeof window.P716QJ.printText === 'function') {
+                console.log("Usando P716QJ.printText");
+                window.P716QJ.printText(texto);
+                impresionExitosa = true;
+              } else if (typeof window.P716QJ.print === 'function') {
+                console.log("Usando P716QJ.print");
+                window.P716QJ.print(texto);
+                impresionExitosa = true;
+              }
+            }
           } catch (e) {
-            console.error("Error al imprimir vía intent:", e);
+            console.error("Error en método específico para Q2i:", e);
           }
         }
         
         // ==========================================
-        // MÉTODO 2: API específica P716QJ-E1X
+        // MÉTODO MANUAL: ESC/POS nativo
         // ==========================================
-        if (!impresionExitosa && printerModule) {
+        if (!impresionExitosa) {
           try {
-            // Detectar el método adecuado para imprimir
-            if (printerModule.printText) {
-              console.log("Imprimiendo con printerModule.printText");
-              printerModule.printText(texto);
-              impresionExitosa = true;
-            }
-            else if (printerModule.print) {
-              console.log("Imprimiendo con printerModule.print");
-              if (typeof printerModule.print === 'function') {
-                // Si es una función, puede aceptar texto directo o un objeto de configuración
-                try {
-                  printerModule.print(texto);
-                } catch (e) {
-                  // Si falla, intentar como objeto
-                  printerModule.print({
-                    text: texto,
-                    size: tamanio
-                  });
-                }
-                impresionExitosa = true;
-              }
-            }
-            else if (printerModule.printString) {
-              console.log("Imprimiendo con printerModule.printString");
-              printerModule.printString(texto);
-              impresionExitosa = true;
-            }
+            console.log("Intentando método ESC/POS nativo");
             
-            // Intentar cortar papel si está disponible
-            if (impresionExitosa) {
-              console.log("Impresión exitosa, intentando cortar papel");
-              try {
-                if (printerModule.cutPaper) {
-                  printerModule.cutPaper();
-                } else if (printerModule.cut) {
-                  printerModule.cut();
-                }
-              } catch (e) {
-                console.log("Error al cortar papel (no crítico):", e);
-              }
+            const comandos = generarComandosESCPOS(texto, tamanio);
+            
+            if (window.android && window.android.printRawData) {
+              window.android.printRawData(comandos);
+              impresionExitosa = true;
+            } else if (window.android && window.android.sendRAWData) {
+              window.android.sendRAWData(comandos);
+              impresionExitosa = true;
+            } else if (window.printer && window.printer.sendCommand) {
+              window.printer.sendCommand(comandos);
+              impresionExitosa = true;
             }
           } catch (e) {
-            console.error("Error al imprimir con API específica:", e);
+            console.error("Error en método ESC/POS:", e);
           }
         }
         
         // ==========================================
-        // MÉTODO 3: Usando JSBridge (común en dispositivos chinos)
+        // MÉTODO ALTERNATIVO: WebUSB si está disponible
         // ==========================================
-        if (!impresionExitosa && window.JSBridge) {
+        if (!impresionExitosa && navigator.usb) {
           try {
-            console.log("Intentando imprimir vía JSBridge");
-            if (window.JSBridge.print) {
-              window.JSBridge.print(texto);
-              impresionExitosa = true;
-            } else if (window.JSBridge.printer && window.JSBridge.printer.print) {
-              window.JSBridge.printer.print(texto);
-              impresionExitosa = true;
-            }
-          } catch (e) {
-            console.error("Error con JSBridge:", e);
-          }
-        }
-        
-        // ==========================================
-        // MÉTODO 4: Implementación alternativa directa a AIDL
-        // ==========================================
-        if (!impresionExitosa && window.aidl) {
-          try {
-            console.log("Intentando imprimir vía AIDL");
-            if (window.aidl.printer && window.aidl.printer.printText) {
-              window.aidl.printer.printText(texto);
-              impresionExitosa = true;
-            }
-          } catch (e) {
-            console.error("Error con AIDL:", e);
-          }
-        }
-        
-        // ==========================================
-        // MÉTODO 5: Llamada directa a Android (último recurso)
-        // ==========================================
-        if (!impresionExitosa && window.android) {
-          try {
-            console.log("Intentando métodos directos de Android");
+            console.log("Intentando WebUSB para acceso directo a hardware");
+            // Nota: Este código es asincrónico, pero lo dejamos como ejemplo
+            // Implementación simplificada para este caso
             
-            if (window.android.printText) {
-              window.android.printText(texto);
-              impresionExitosa = true;
-            } else if (window.android.print) {
-              if (typeof window.android.print === 'function') {
-                window.android.print(texto);
-                impresionExitosa = true;
-              }
-            } else if (window.android.callPrintService) {
-              window.android.callPrintService("print", JSON.stringify({
-                text: texto,
-                fontSize: tamanio
-              }));
-              impresionExitosa = true;
-            } else {
-              // Imprimir caracteres ESC/POS directamente (avanzado)
-              const bytes = generarComandosESCPOS(texto, tamanio);
-              if (window.android.printRawData) {
-                window.android.printRawData(bytes);
-                impresionExitosa = true;
-              } else if (window.android.sendRAWData) {
-                window.android.sendRAWData(bytes);
-                impresionExitosa = true;
-              }
-            }
-            
-            // Intentar cortar papel
-            if (impresionExitosa && window.android.cutPaper) {
-              window.android.cutPaper();
-            }
+            // No ejecutamos realmente esto aquí porque podría pedir permisos
+            // Y eso no es lo que queremos en este momento
+            impresionExitosa = false;
           } catch (e) {
-            console.error("Error con Android API:", e);
+            console.error("Error en WebUSB:", e);
           }
         }
         
@@ -579,7 +561,7 @@
           mostrarNotificacion("Impresión completada");
         } else {
           // Si todo falla, mostrar error e intentar la simulación
-          console.warn("Todos los métodos de impresión fallaron, utilizando simulación");
+          console.warn("Los métodos nativos de impresión fallaron, utilizando simulación");
           mostrarError("No se pudo acceder a la impresora. Usando simulación.");
           simularImpresion(texto);
         }
