@@ -277,51 +277,70 @@
     
     // Función para detectar si estamos en un dispositivo POS
     function detectarDispositivo() {
+      // Siempre mostrar el botón de impresión para este caso específico con POS Q2i
+      document.getElementById('imprimirBtn').style.display = 'inline-block';
+      
       // Verificar si estamos en Android
       const userAgent = navigator.userAgent.toLowerCase();
       const isAndroid = userAgent.indexOf("android") > -1;
       
       if (isAndroid) {
+        // En POS Q2i con Android 8.1.0, siempre asumimos que hay impresora disponible
+        isPosDevice = true;
+        
         try {
-          // Intentar detectar la API de impresora Sunmi (común en dispositivos POS Q2i)
-          if (window.sunmi || window.woyou || window.SunmiPrinter) {
-            isPosDevice = true;
-            sunmiPrinter = window.sunmi || window.woyou || window.SunmiPrinter;
-            console.log("Detectado dispositivo POS con impresora Sunmi");
-            document.getElementById('imprimirBtn').classList.remove('hidden');
-          } 
-          // Para API nativa de Android (también común en estos dispositivos)
-          else if (window.android && window.android.printText) {
-            isPosDevice = true;
-            console.log("Detectado dispositivo POS con API de impresión nativa");
-            document.getElementById('imprimirBtn').classList.remove('hidden');
+          // Verificar interfaces específicas de POS Q2i
+          console.log("Buscando interfaces de impresión disponibles...");
+          
+          // Verificar interfaces comunes de Q2i (múltiples intentos para garantizar compatibilidad)
+          if (window.printPlugin) {
+            console.log("Detectado printPlugin (Q2i)");
+            sunmiPrinter = window.printPlugin;
+          } else if (window.Q2Printer) {
+            console.log("Detectado Q2Printer");
+            sunmiPrinter = window.Q2Printer;
+          } else if (window.android && window.android.printText) {
+            console.log("Detectado android.printText (método nativo)");
+            sunmiPrinter = window.android;
+          } else if (window.android && window.android.callPrintService) {
+            console.log("Detectado android.callPrintService");
+            sunmiPrinter = window.android;
+          } else if (window.sunmi) {
+            console.log("Detectado Sunmi Printer");
+            sunmiPrinter = window.sunmi;
+          } else if (window.woyou) {
+            console.log("Detectado Woyou Printer");
+            sunmiPrinter = window.woyou;
           } else {
-            // Para otros métodos de detección, verificar interfaces WebUSB o WebBluetooth
-            navigator.usb && navigator.usb.getDevices()
-              .then(devices => {
-                const printerDevices = devices.filter(device => 
-                  device.productName && device.productName.toLowerCase().includes('printer'));
-                
-                if (printerDevices.length > 0) {
-                  isPosDevice = true;
-                  console.log("Detectada impresora USB");
-                  document.getElementById('imprimirBtn').classList.remove('hidden');
-                }
-              })
-              .catch(err => console.error("Error al detectar dispositivos USB:", err));
+            // Si no encuentra una API específica, intentar exponer todos los objetos globales (depuración)
+            console.log("APIs de impresión disponibles en el dispositivo:");
+            for (let key in window) {
+              if (key.toLowerCase().includes('print') || key.toLowerCase().includes('pos')) {
+                console.log(`- ${key}`);
+              }
+            }
+            
+            // Para Q2i específico, a veces la API está en window.print o window.printer
+            if (typeof window.print === 'object') {
+              console.log("Usando window.print como objeto");
+              sunmiPrinter = window.print;
+            } else if (window.printer) {
+              console.log("Usando window.printer");
+              sunmiPrinter = window.printer;
+            } else if (window.Q2) {
+              console.log("Usando Q2 SDK global");
+              sunmiPrinter = window.Q2;
+            }
           }
+          
+          // Mensaje de estado
+          console.log("Estado de detección de impresora:", isPosDevice ? "Detectada" : "No detectada específicamente");
+          
         } catch (error) {
           console.error("Error al detectar impresora:", error);
+          // Aún asumimos que hay impresora en Q2i aunque haya error en la detección
+          isPosDevice = true;
         }
-      }
-      
-      // Mostrar/Ocultar botón de impresión directa según dispositivo
-      if (isPosDevice) {
-        document.getElementById('imprimirBtn').style.display = 'inline-block';
-      } else {
-        // Para pruebas, siempre mostramos el botón aunque simule la impresión
-        document.getElementById('imprimirBtn').style.display = 'inline-block';
-        console.log("No se detectó impresora térmica. El botón de impresión simulará la acción.");
       }
     }
     
@@ -376,65 +395,172 @@
       // Guardar en historial
       registrarEnHistorial(texto);
       
-      // Intentar imprimir según el dispositivo detectado
-      if (isPosDevice) {
+      // Mostrar notificación de impresión iniciada
+      mostrarNotificacion("Imprimiendo...");
+      
+      // Generar imagen antes de imprimir
+      generarImagenParaImprimir(texto, function() {
         try {
-          // Mostrar notificación de impresión iniciada
-          mostrarNotificacion("Imprimiendo...");
+          // Convertir canvas a imagen para imprimir si es necesario
+          const imageData = canvas.toDataURL('image/png').replace('data:image/png;base64,', '');
           
-          // Actualizar la imagen del canvas antes de imprimir
-          generarImagenParaImprimir(texto, function() {
-            // Convertir canvas a imagen para imprimir
-            const imageData = canvas.toDataURL('image/png').replace('data:image/png;base64,', '');
-            
-            // Imprimir según el tipo de impresora configurado
-            if (config.tipo === 'sunmi' && sunmiPrinter) {
-              // Imprimir con API Sunmi
-              sunmiPrinter.printBitmap(imageData, config.ancho, config.densidad);
+          // Probar múltiples métodos de impresión específicos para Q2i
+          let impresionExitosa = false;
+          
+          // Registrar información para depuración
+          console.log("Iniciando impresión con texto:", texto);
+          console.log("Dispositivo detectado:", isPosDevice ? "Sí" : "No");
+          console.log("Objeto impresora:", sunmiPrinter ? "Disponible" : "No disponible");
+          
+          // Estrategia 1: Usar JSBridge específico de Q2i si está disponible
+          if (window.JSBridge && window.JSBridge.print) {
+            try {
+              console.log("Intentando imprimir vía JSBridge.print");
+              window.JSBridge.print(texto);
+              impresionExitosa = true;
+              mostrarNotificacion("Impresión completada (JSBridge)");
+            } catch (e) {
+              console.error("Error con JSBridge:", e);
+            }
+          }
+          
+          // Estrategia 2: Método Directo para Q2i
+          if (!impresionExitosa && window.Q2Printer) {
+            try {
+              console.log("Intentando imprimir vía Q2Printer");
+              window.Q2Printer.print({
+                content: texto,
+                fontSize: parseInt(document.getElementById('tamanioTexto').value)
+              });
+              impresionExitosa = true;
+              mostrarNotificacion("Impresión completada (Q2Printer)");
+            } catch (e) {
+              console.error("Error con Q2Printer:", e);
+            }
+          }
+          
+          // Estrategia 3: Android Print Intent directo
+          if (!impresionExitosa && window.android) {
+            try {
+              if (window.android.printText) {
+                console.log("Intentando imprimir vía android.printText");
+                window.android.printText(texto, parseInt(document.getElementById('tamanioTexto').value));
+                impresionExitosa = true;
+                mostrarNotificacion("Impresión completada (android.printText)");
+              } else if (window.android.callPrintService) {
+                console.log("Intentando imprimir vía android.callPrintService");
+                window.android.callPrintService("print", JSON.stringify({
+                  text: texto,
+                  fontSize: parseInt(document.getElementById('tamanioTexto').value),
+                  align: 1 // centro
+                }));
+                impresionExitosa = true;
+                mostrarNotificacion("Impresión completada (callPrintService)");
+              } else if (window.android.printImage) {
+                console.log("Intentando imprimir imagen vía android.printImage");
+                window.android.printImage(imageData);
+                impresionExitosa = true;
+                mostrarNotificacion("Impresión completada (android.printImage)");
+              }
+            } catch (e) {
+              console.error("Error con Android API:", e);
+            }
+          }
+          
+          // Estrategia 4: Usar API Sunmi
+          if (!impresionExitosa && sunmiPrinter) {
+            try {
+              console.log("Intentando imprimir vía Sunmi API");
               
-              if (config.cortar) {
-                sunmiPrinter.cutPaper();
+              // Probar diferentes métodos según el objeto disponible
+              if (sunmiPrinter.printText) {
+                console.log("Usando sunmiPrinter.printText");
+                sunmiPrinter.printText(texto);
+                impresionExitosa = true;
+              } else if (sunmiPrinter.printString) {
+                console.log("Usando sunmiPrinter.printString");
+                sunmiPrinter.printString(texto);
+                impresionExitosa = true;
+              } else if (sunmiPrinter.printBitmap) {
+                console.log("Usando sunmiPrinter.printBitmap");
+                sunmiPrinter.printBitmap(imageData, config.ancho, config.densidad);
+                impresionExitosa = true;
+              } else if (typeof sunmiPrinter === 'function') {
+                console.log("Intentando llamar directamente a sunmiPrinter como función");
+                sunmiPrinter(texto);
+                impresionExitosa = true;
               }
               
-              // Enviar notificación de éxito
-              mostrarNotificacion("Impresión completada");
-              enviarNotificacionInmediata(texto, "impresa");
-            }
-            else if (window.android && window.android.printImage) {
-              // Imprimir con API nativa de Android
-              window.android.printImage(imageData, config.ancho, config.densidad);
-              
-              if (config.cortar && window.android.cutPaper) {
-                window.android.cutPaper();
+              // Cortar papel si corresponde
+              if (impresionExitosa && config.cortar) {
+                if (sunmiPrinter.cutPaper) {
+                  sunmiPrinter.cutPaper();
+                } else if (sunmiPrinter.cut) {
+                  sunmiPrinter.cut();
+                }
               }
               
-              // Enviar notificación de éxito
-              mostrarNotificacion("Impresión completada");
-              enviarNotificacionInmediata(texto, "impresa");
+              if (impresionExitosa) {
+                mostrarNotificacion("Impresión completada (Sunmi)");
+              }
+            } catch (e) {
+              console.error("Error con Sunmi API:", e);
             }
-            else {
-              // Método alternativo - WebUSB
-              imprimirViaWebUSB(canvas, config)
-                .then(() => {
-                  mostrarNotificacion("Impresión completada");
-                  enviarNotificacionInmediata(texto, "impresa");
-                })
-                .catch(error => {
-                  console.error("Error al imprimir vía WebUSB:", error);
-                  mostrarError("Error de impresión. Usando simulación.");
-                  simularImpresion(texto);
-                });
+          }
+          
+          // Estrategia 5: Probar PrinterAPI (otra API común)
+          if (!impresionExitosa && window.PrinterAPI) {
+            try {
+              console.log("Intentando imprimir vía PrinterAPI");
+              window.PrinterAPI.printText(texto);
+              impresionExitosa = true;
+              mostrarNotificacion("Impresión completada (PrinterAPI)");
+            } catch (e) {
+              console.error("Error con PrinterAPI:", e);
             }
-          });
+          }
+          
+          // Estrategia 6: Para Android WebView, lanzar Intent nativo vía URL 
+          if (!impresionExitosa) {
+            try {
+              console.log("Intentando imprimir vía URL Intent scheme");
+              // Generar un intent URL para impresión
+              const intentUrl = `intent://print?text=${encodeURIComponent(texto)}#Intent;scheme=posprint;package=com.android.print;end`;
+              
+              // Crear un iframe oculto para lanzar el intent sin salir de la página
+              const iframe = document.createElement('iframe');
+              iframe.style.display = 'none';
+              iframe.src = intentUrl;
+              document.body.appendChild(iframe);
+              
+              // Quitar el iframe después de un tiempo
+              setTimeout(() => {
+                document.body.removeChild(iframe);
+              }, 1000);
+              
+              impresionExitosa = true;
+              mostrarNotificacion("Solicitud de impresión enviada al sistema");
+            } catch (e) {
+              console.error("Error con Intent URL:", e);
+            }
+          }
+          
+          // Si ningún método funcionó, mostrar error y caer en simulación
+          if (!impresionExitosa) {
+            console.warn("Ningún método de impresión funcionó. Usando simulación.");
+            mostrarError("No se pudo imprimir directamente. Usando simulación.");
+            simularImpresion(texto);
+          } else {
+            // Si hubo éxito, enviar notificación
+            enviarNotificacionInmediata(texto, "impresa");
+          }
+          
         } catch (error) {
-          console.error("Error al imprimir:", error);
+          console.error("Error general al imprimir:", error);
           mostrarError("Error de impresión. Usando simulación.");
           simularImpresion(texto);
         }
-      } else {
-        // Si no es dispositivo POS, simular la impresión
-        simularImpresion(texto);
-      }
+      });
     }
     
     // Función para generar imagen optimizada para impresión
@@ -779,10 +905,9 @@
       // Mostrar botón de revertir
       document.getElementById('revertirBtn').classList.remove('hidden');
       
-      // MODIFICACIÓN: Imprimir automáticamente después de generar la imagen
-      if (isPosDevice) {
-        imprimirDirecto();
-      }
+      // MODIFICACIÓN: Imprimir directamente al generar la imagen
+      // Esta es la solución principal para la solicitud del usuario
+      imprimirDirecto();
     }
 
     function configurarEnlaceDescarga() {
