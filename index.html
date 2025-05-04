@@ -19,8 +19,9 @@
       max-width: 100%;
       box-sizing: border-box;
     }
-    input[type="text"], input[type="password"] {
+    input[type="text"] {
       width: 80%;
+      font-size: 18px;
     }
     canvas {
       border: 1px solid #ccc;
@@ -36,17 +37,6 @@
     }
     .hidden {
       display: none;
-    }
-    #historialTabla td, #historialTabla th {
-      padding: 8px;
-      border: 1px solid #ddd;
-    }
-    #historialTabla {
-      margin: 20px auto;
-      border-collapse: collapse;
-      width: 100%;
-      overflow-x: auto;
-      display: block;
     }
     .notification {
       background-color: #4CAF50;
@@ -68,23 +58,6 @@
       border-radius: 4px;
       margin-top: 10px;
     }
-    .badge {
-      display: inline-block;
-      background-color: #ff5722;
-      color: white;
-      border-radius: 50%;
-      width: 20px;
-      height: 20px;
-      text-align: center;
-      line-height: 20px;
-      font-size: 12px;
-      margin-left: 5px;
-    }
-    #queueStatus {
-      font-size: 14px;
-      margin-top: 10px;
-      color: #666;
-    }
     /* Estilos para botón imprimir */
     #imprimirBtn {
       display: inline-block;
@@ -96,6 +69,16 @@
       margin-top: 10px;
       margin-left: 10px;
     }
+    /* Estilos para botón generar */
+    #generarBtn {
+      background-color: #4CAF50;
+      color: white;
+      padding: 12px 24px;
+      font-size: 18px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
     /* Estilos responsive para móviles */
     @media screen and (max-width: 600px) {
       body {
@@ -106,52 +89,18 @@
         height: auto;
       }
     }
-    .config-section {
-      border: 1px solid #ddd;
-      padding: 10px;
-      margin: 10px 0;
-      background-color: #f9f9f9;
-      border-radius: 5px;
-      text-align: left;
-    }
-    .config-section h3 {
-      margin-top: 0;
-    }
-    .print-options {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-    }
-    .print-option {
-      width: 48%;
-      margin-bottom: 10px;
-    }
-    .print-option label {
-      display: block;
-      margin-bottom: 5px;
-    }
   </style>
 </head>
 <body>
-  <div id="login">
-    <h2>Iniciar Sesión</h2>
-    <input type="text" id="user" placeholder="Usuario"><br>
-    <input type="password" id="pass" placeholder="Contraseña"><br>
-    <button onclick="login()">Entrar</button>
-  </div>
-
-  <div id="app" class="hidden">
+  <div id="app">
     <h1>Generador de Imagen para Impresión</h1>
-    <p>Bienvenido, <span id="nombreUsuario"></span></p>
-    <input type="text" id="texto" placeholder="Escribe aquí letras o número">
+    <input type="text" id="texto" placeholder="Escribe aquí letras o número" autofocus>
     <br>
     Tamaño del texto: <strong id="tamanioTextoLabel">24</strong> px
     <br>
     <input type="range" id="tamanioTexto" min="10" max="100" value="24">
     <br>
-    <button onclick="generarImagen()">Generar Imagen</button>
-    <button onclick="imprimirDirectamente()" id="imprimirBtn">Imprimir Directamente</button>
-    <button onclick="revertirImagen()" id="revertirBtn" class="hidden">Revertir Imagen</button>
+    <button id="generarBtn" onclick="generarImagen()">Generar e Imprimir</button>
     <br>
     <div id="canvasContainer">
       <canvas id="canvas" width="200" height="100"></canvas>
@@ -159,41 +108,8 @@
     <br>
     <a id="descargarBtn" download="patente.png" class="hidden">Descargar Imagen</a>
     
-    <div class="config-section hidden" id="configuracionImpresora">
-      <h3>Configuración de Impresora</h3>
-      <div class="print-options">
-        <div class="print-option">
-          <label for="anchoImpresion">Ancho de impresión (mm):</label>
-          <input type="number" id="anchoImpresion" value="58" min="40" max="80">
-        </div>
-        <div class="print-option">
-          <label for="densidadImpresion">Densidad:</label>
-          <select id="densidadImpresion">
-            <option value="0">Normal</option>
-            <option value="1">Media</option>
-            <option value="2">Alta</option>
-          </select>
-        </div>
-        <div class="print-option">
-          <label for="cortarPapel">Cortar papel:</label>
-          <input type="checkbox" id="cortarPapel" checked>
-        </div>
-      </div>
-    </div>
-    
-    <div id="notificacion" class="notification">Notificación enviada a Discord</div>
+    <div id="notificacion" class="notification">Notificación enviada</div>
     <div id="errorNotificacion" class="notification error-notification">Error al enviar notificación</div>
-    <div id="queueStatus" class="hidden">
-      Notificaciones pendientes: <span id="queueCount">0</span>
-      <button id="sendQueueBtn" onclick="procesarColaMensajes(true)">Enviar ahora</button>
-    </div>
-  </div>
-
-  <div id="historial" class="hidden">
-    <h2>Historial de impresiones</h2>
-    <div style="overflow-x: auto;">
-      <table id="historialTabla"></table>
-    </div>
   </div>
 
   <script>
@@ -202,32 +118,8 @@
     console.log("User Agent:", navigator.userAgent);
     console.log("Plataforma:", navigator.platform);
     
-    // Service Worker para procesamiento en segundo plano
-    if ('serviceWorker' in navigator && 'SyncManager' in window) {
-      navigator.serviceWorker.register('sw.js')
-        .then(registration => {
-          console.log('Service Worker registrado correctamente:', registration);
-        })
-        .catch(error => {
-          console.error('Error al registrar el Service Worker:', error);
-        });
-    }
-
-    const users = {
-      "admin": "1234",
-      "Freddy": "Fred",
-      "Milton": "Mork"  // Agrega más usuarios aquí
-    };
-
-    let usuarioActual = null;
-    let historial = [];
     let imagenGenerada = null;
-    let colaMensajes = [];
-    let revisandoCola = false;
     
-    // URL del webhook de Discord - ASEGÚRATE DE QUE ESTO SEA CORRECTO
-    const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1364802693012521000/MBUF565wKk7lV_xJgy5e4JqNCOI-PYOCUm1E3VxuJt9DWQ8StrXVrQGK8IOmIa0tmfz9";
-
     // Variables para impresora específica del Q2i P716QJ-E1X
     let isPosDevice = false;
     let printerModule = null;
@@ -239,19 +131,10 @@
     });
 
     window.onload = function() {
-      cargarHistorial();
-      cargarColaMensajes();
-      
       // Intentar acceder a impresora si no se ha hecho ya
       if (!printerModule) {
         buscarImpresoraQ2i();
       }
-      
-      // Verificar cola periódicamente incluso si no estás logueado
-      setInterval(verificarColaPendiente, 60000); // Cada minuto
-      
-      // Primera verificación después de 5 segundos
-      setTimeout(verificarColaPendiente, 5000);
 
       // Configurar color de fondo del canvas al cargar
       const canvas = document.getElementById('canvas');
@@ -262,22 +145,12 @@
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
       
-      // Verificar si hay usuario guardado
-      const usuarioGuardado = localStorage.getItem('usuarioActual');
-      if (usuarioGuardado) {
-        usuarioActual = usuarioGuardado;
-        document.getElementById('login').classList.add('hidden');
-        document.getElementById('app').classList.remove('hidden');
-        document.getElementById('nombreUsuario').textContent = usuarioActual;
-        if (usuarioActual === 'admin') {
-          document.getElementById('historial').classList.remove('hidden');
-          document.getElementById('configuracionImpresora').classList.remove('hidden');
-          renderHistorial();
-        } else {
-          document.getElementById('historial').classList.add('hidden');
-          document.getElementById('configuracionImpresora').classList.add('hidden');
+      // Configurar evento Enter para el campo de texto
+      document.getElementById('texto').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+          generarImagen();
         }
-      }
+      });
     };
     
     // Función específica para buscar impresora en Q2i P716QJ-E1X
@@ -360,9 +233,6 @@
         console.error("Error al buscar impresora:", error);
       }
       
-      // Siempre mostrar el botón de impresión (incluso en simulación)
-      document.getElementById('imprimirBtn').style.display = 'inline-block';
-      
       if (isPosDevice && printerModule) {
         console.log("Impresora detectada y accesible");
       } else {
@@ -372,16 +242,162 @@
       }
     }
     
-    // Función para imprimir directamente - optimizada para Q2i P716QJ
-    function imprimirDirectamente() {
+    document.getElementById('tamanioTexto').addEventListener('input', e => {
+      document.getElementById('tamanioTextoLabel').textContent = e.target.value;
+    });
+
+    function generarImagen() {
       const texto = document.getElementById('texto').value;
       if (!texto) {
         alert("Por favor ingresa un texto para imprimir");
         return;
       }
       
-      // Registrar en historial
-      registrarEnHistorial(texto);
+      const tamanio = document.getElementById('tamanioTexto').value;
+      const canvas = document.getElementById('canvas');
+      
+      // Aumentar la resolución del canvas (factor 4x para mejor calidad)
+      const factorEscala = 4; // Mejor calidad
+      canvas.width = 200 * factorEscala;
+      canvas.height = 100 * factorEscala;
+      
+      // Mantener el tamaño visual en la página mediante CSS
+      canvas.style.width = "200px";
+      canvas.style.height = "100px";
+      
+      // Asegurar que el canvas tenga fondo blanco
+      canvas.style.backgroundColor = "#FFFFFF";
+      document.getElementById('canvasContainer').style.backgroundColor = "#FFFFFF";
+      
+      const ctx = canvas.getContext('2d', { alpha: false }); // Deshabilitar transparencia
+      
+      // Limpiar completamente el canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Primero dibujamos un fondo blanco puro para asegurar que no sea transparente
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Escalar el contexto para compensar el aumento de resolución
+      ctx.scale(factorEscala, factorEscala);
+      
+      // Ajuste para mejorar la nitidez de la fuente
+      ctx.font = `${tamanio}px Arial`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "#000000"; // Negro puro para el texto
+      
+      // Asegurar que dibujamos en el centro correcto
+      ctx.fillText(texto, canvas.width / (2 * factorEscala), canvas.height / (2 * factorEscala));
+      
+      // Restaurar la escala para futuros dibujos
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+      imagenGenerada = canvas.toDataURL('image/png', 1.0);  // Máxima calidad
+
+      // Habilitar descarga
+      const enlace = document.getElementById('descargarBtn');
+      enlace.classList.remove('hidden');
+      enlace.textContent = "Descargar Imagen";
+
+      // Configurar el enlace de descarga
+      configurarEnlaceDescarga();
+
+      // Imprimir directamente
+      imprimirDirectamente(texto);
+      
+      // Limpiar el campo de texto y enfocarlo para la siguiente entrada
+      document.getElementById('texto').value = '';
+      document.getElementById('texto').focus();
+    }
+
+    function configurarEnlaceDescarga() {
+      const enlace = document.getElementById('descargarBtn');
+      const canvas = document.getElementById('canvas');
+      
+      // Asegurar que la imagen tenga fondo blanco puro antes de generar la URL
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = canvas.width;
+      tempCanvas.height = canvas.height;
+      const tempCtx = tempCanvas.getContext('2d', { alpha: false }); // Deshabilitar transparencia
+      
+      // Dibujar fondo blanco puro
+      tempCtx.fillStyle = '#FFFFFF';
+      tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+      
+      // Dibujar la imagen del canvas original encima
+      tempCtx.drawImage(canvas, 0, 0);
+      
+      // Generar URL a partir del canvas temporal con fondo blanco puro
+      const imagenURL = tempCanvas.toDataURL('image/png', 1.0);
+      
+      // Pre-cargar una imagen para verificar que el fondo sea correcto
+      const img = new Image();
+      img.onload = function() {
+        const verifyCanvas = document.createElement('canvas');
+        verifyCanvas.width = img.width;
+        verifyCanvas.height = img.height;
+        const verifyCtx = verifyCanvas.getContext('2d');
+        verifyCtx.fillStyle = '#FFFFFF';
+        verifyCtx.fillRect(0, 0, verifyCanvas.width, verifyCanvas.height);
+        verifyCtx.drawImage(img, 0, 0);
+        
+        // Usar esta imagen verificada para la descarga
+        enlace.href = verifyCanvas.toDataURL('image/png', 1.0);
+      };
+      img.src = imagenURL;
+    }
+    
+    // Función para generar imagen optimizada para impresión
+    function generarImagenParaImprimir(texto, callback) {
+      const tamanio = document.getElementById('tamanioTexto').value;
+      const canvas = document.getElementById('canvas');
+      
+      // Actualizar tamaño para impresión térmica (optimizado para 58mm)
+      const ancho = 58 * 8; // 8 pixels por mm es un buen estándar para impresoras térmicas
+      canvas.width = ancho;
+      canvas.height = 100;
+      
+      // Mantener el tamaño visual en la página mediante CSS
+      canvas.style.width = "200px";
+      canvas.style.height = "100px";
+      
+      const ctx = canvas.getContext('2d', { alpha: false });
+      
+      // Limpiar completamente el canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Fondo blanco
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Configurar texto
+      ctx.fillStyle = "#000000";
+      ctx.font = `bold ${tamanio}px Arial`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      
+      // Dibujar texto
+      ctx.fillText(texto, canvas.width / 2, canvas.height / 2);
+      
+      // Guardar la imagen generada
+      imagenGenerada = canvas.toDataURL('image/png', 1.0);
+      
+      // Callback después de generar la imagen
+      if (typeof callback === 'function') {
+        callback();
+      }
+    }
+    
+    // Función para imprimir directamente
+    function imprimirDirectamente(texto) {
+      if (!texto) {
+        texto = document.getElementById('texto').value;
+        if (!texto) {
+          alert("Por favor ingresa un texto para imprimir");
+          return;
+        }
+      }
       
       // Mostrar notificación de inicio
       mostrarNotificacion("Iniciando impresión...");
@@ -561,7 +577,6 @@
         // ==========================================
         if (impresionExitosa) {
           mostrarNotificacion("Impresión completada");
-          enviarNotificacionInmediata(texto, "impresa");
         } else {
           // Si todo falla, mostrar error e intentar la simulación
           console.warn("Todos los métodos de impresión fallaron, utilizando simulación");
@@ -619,53 +634,6 @@
       return comandos;
     }
     
-    // Función para generar imagen optimizada para impresión
-    function generarImagenParaImprimir(texto, callback) {
-      const tamanio = document.getElementById('tamanioTexto').value;
-      const canvas = document.getElementById('canvas');
-      
-      // Actualizar tamaño para impresión térmica (optimizado para 58mm)
-      const ancho = 58 * 8; // 8 pixels por mm es un buen estándar para impresoras térmicas
-      canvas.width = ancho;
-      canvas.height = 100;
-      
-      // Mantener el tamaño visual en la página mediante CSS
-      canvas.style.width = "200px";
-      canvas.style.height = "100px";
-      
-      const ctx = canvas.getContext('2d', { alpha: false });
-      
-      // Limpiar completamente el canvas
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
-      // Fondo blanco
-      ctx.fillStyle = "#FFFFFF";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      // Configurar texto
-      ctx.fillStyle = "#000000";
-      ctx.font = `bold ${tamanio}px Arial`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      
-      // Dibujar texto
-      ctx.fillText(texto, canvas.width / 2, canvas.height / 2);
-      
-      // Guardar la imagen generada
-      imagenGenerada = canvas.toDataURL('image/png', 1.0);
-      
-      // Habilitar botón de descarga
-      const enlace = document.getElementById('descargarBtn');
-      enlace.classList.remove('hidden');
-      enlace.textContent = "Descargar Imagen";
-      configurarEnlaceDescarga();
-      
-      // Callback después de generar la imagen
-      if (typeof callback === 'function') {
-        callback();
-      }
-    }
-    
     // Simulación de impresión para casos fallidos o pruebas
     function simularImpresion(texto) {
       // Generar la imagen primero
@@ -676,493 +644,8 @@
         // Simular un tiempo de impresión
         setTimeout(function() {
           mostrarNotificacion("Impresión completada (simulación)");
-          
-          // Enviar notificación a Discord
-          enviarNotificacionInmediata(texto, "impresa (simulación)");
         }, 1500);
       });
-    }
-    
-    // Verificar y procesar la cola de mensajes pendientes
-    function verificarColaPendiente() {
-      if (navigator.onLine && colaMensajes.length > 0) {
-        procesarColaMensajes(false);
-      }
-      actualizarEstadoCola();
-    }
-    
-    // Función para registrar en historial
-    function registrarEnHistorial(texto) {
-      const ahora = new Date();
-      const nuevoRegistro = {
-        usuario: usuarioActual,
-        texto: texto,
-        fecha: ahora.toLocaleDateString(),
-        hora: ahora.toLocaleTimeString(),
-        tipo: "impresión"
-      };
-      
-      historial.push(nuevoRegistro);
-      
-      // Guardar en localStorage
-      try {
-        localStorage.setItem('historialPatentes', JSON.stringify(historial));
-      } catch (error) {
-        console.error("Error al guardar en localStorage:", error);
-      }
-
-      if (usuarioActual === 'admin') renderHistorial();
-    }
-    
-    // Evento que se dispara cuando se recupera la conexión
-    window.addEventListener('online', function() {
-      mostrarNotificacion("Conexión recuperada");
-      verificarColaPendiente();
-    });
-    
-    // Evento que se dispara cuando se pierde la conexión
-    window.addEventListener('offline', function() {
-      mostrarError("Conexión perdida - Las notificaciones se guardarán");
-      actualizarEstadoCola();
-    });
-
-    // Función para cargar el historial desde localStorage
-    function cargarHistorial() {
-      try {
-        const historialGuardado = localStorage.getItem('historialPatentes');
-        if (historialGuardado) {
-          historial = JSON.parse(historialGuardado);
-        }
-      } catch (error) {
-        console.error("Error al cargar historial:", error);
-        historial = [];
-      }
-    }
-
-    // Función para cargar la cola de mensajes desde localStorage
-    function cargarColaMensajes() {
-      try {
-        const colaGuardada = localStorage.getItem('colaMensajesDiscord');
-        if (colaGuardada) {
-          colaMensajes = JSON.parse(colaGuardada);
-          actualizarEstadoCola();
-        }
-      } catch (error) {
-        console.error("Error al cargar cola de mensajes:", error);
-        colaMensajes = [];
-      }
-    }
-    
-    // Función para guardar la cola de mensajes en localStorage
-    function guardarColaMensajes() {
-      try {
-        localStorage.setItem('colaMensajesDiscord', JSON.stringify(colaMensajes));
-        actualizarEstadoCola();
-      } catch (error) {
-        console.error("Error al guardar cola de mensajes:", error);
-      }
-    }
-    
-    // Función para actualizar la visualización del estado de la cola
-    function actualizarEstadoCola() {
-      const queueStatus = document.getElementById('queueStatus');
-      const queueCount = document.getElementById('queueCount');
-      
-      if (queueStatus && queueCount) {
-        if (colaMensajes.length > 0) {
-          queueStatus.classList.remove('hidden');
-          queueCount.textContent = colaMensajes.length;
-        } else {
-          queueStatus.classList.add('hidden');
-        }
-      }
-    }
-
-    function login() {
-      const u = document.getElementById('user').value;
-      const p = document.getElementById('pass').value;
-      if (users[u] && users[u] === p) {
-        usuarioActual = u;
-        // Guardar usuario en localStorage para mantener la sesión
-        localStorage.setItem('usuarioActual', usuarioActual);
-        
-        document.getElementById('login').classList.add('hidden');
-        document.getElementById('app').classList.remove('hidden');
-        document.getElementById('nombreUsuario').textContent = usuarioActual;
-        if (usuarioActual === 'admin') {
-          document.getElementById('historial').classList.remove('hidden');
-          document.getElementById('configuracionImpresora').classList.remove('hidden');
-          renderHistorial();
-        } else {
-          document.getElementById('historial').classList.add('hidden');
-          document.getElementById('configuracionImpresora').classList.add('hidden');
-        }
-        
-        // Verificar cola de mensajes al iniciar sesión
-        actualizarEstadoCola();
-        if (navigator.onLine && colaMensajes.length > 0) {
-          // Envío inmediato sin delay
-          procesarColaMensajes(true);
-        }
-      } else {
-        alert('Usuario o contraseña incorrectos');
-      }
-    }
-
-    document.getElementById('tamanioTexto').addEventListener('input', e => {
-      document.getElementById('tamanioTextoLabel').textContent = e.target.value;
-    });
-
-    function generarImagen() {
-      const texto = document.getElementById('texto').value;
-      if (!texto) {
-        alert("Por favor ingresa un texto para la patente");
-        return;
-      }
-      
-      const tamanio = document.getElementById('tamanioTexto').value;
-      const canvas = document.getElementById('canvas');
-      
-      // Aumentar la resolución del canvas (factor 4x para mejor calidad)
-      const factorEscala = 4; // Mejor calidad
-      canvas.width = 200 * factorEscala;
-      canvas.height = 100 * factorEscala;
-      
-      // Mantener el tamaño visual en la página mediante CSS
-      canvas.style.width = "200px";
-      canvas.style.height = "100px";
-      
-      // Asegurar que el canvas tenga fondo blanco
-      canvas.style.backgroundColor = "#FFFFFF";
-      document.getElementById('canvasContainer').style.backgroundColor = "#FFFFFF";
-      
-      const ctx = canvas.getContext('2d', { alpha: false }); // Deshabilitar transparencia
-      
-      // Limpiar completamente el canvas
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
-      // Primero dibujamos un fondo blanco puro para asegurar que no sea transparente
-      ctx.fillStyle = "#FFFFFF";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      // Escalar el contexto para compensar el aumento de resolución
-      ctx.scale(factorEscala, factorEscala);
-      
-      // Ajuste para mejorar la nitidez de la fuente
-      ctx.font = `${tamanio}px Arial`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillStyle = "#000000"; // Negro puro para el texto
-      
-      // Asegurar que dibujamos en el centro correcto
-      ctx.fillText(texto, canvas.width / (2 * factorEscala), canvas.height / (2 * factorEscala));
-      
-      // Restaurar la escala para futuros dibujos
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-
-      imagenGenerada = canvas.toDataURL('image/png', 1.0);  // Máxima calidad
-
-      // Guardar en historial
-      const ahora = new Date();
-      const nuevoRegistro = {
-        usuario: usuarioActual,
-        texto,
-        fecha: ahora.toLocaleDateString(),
-        hora: ahora.toLocaleTimeString()
-      };
-      
-      historial.push(nuevoRegistro);
-      
-      // Guardar en localStorage
-      try {
-        localStorage.setItem('historialPatentes', JSON.stringify(historial));
-      } catch (error) {
-        console.error("Error al guardar en localStorage:", error);
-      }
-
-      if (usuarioActual === 'admin') renderHistorial();
-
-      // Habilitar descarga
-      const enlace = document.getElementById('descargarBtn');
-      enlace.classList.remove('hidden');
-      enlace.textContent = "Descargar Imagen";
-
-      // Configurar el enlace de descarga
-      configurarEnlaceDescarga();
-
-      // Mostrar botón de revertir
-      document.getElementById('revertirBtn').classList.remove('hidden');
-      
-      // MODIFICACIÓN: Imprimir directamente al generar la imagen
-      // Esta es la solución principal para la solicitud del usuario
-      imprimirDirectamente();
-    }
-
-    function configurarEnlaceDescarga() {
-      const enlace = document.getElementById('descargarBtn');
-      const canvas = document.getElementById('canvas');
-      
-      // Asegurar que la imagen tenga fondo blanco puro antes de generar la URL
-      const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = canvas.width;
-      tempCanvas.height = canvas.height;
-      const tempCtx = tempCanvas.getContext('2d', { alpha: false }); // Deshabilitar transparencia
-      
-      // Dibujar fondo blanco puro
-      tempCtx.fillStyle = '#FFFFFF';
-      tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-      
-      // Dibujar la imagen del canvas original encima
-      tempCtx.drawImage(canvas, 0, 0);
-      
-      // Generar URL a partir del canvas temporal con fondo blanco puro
-      const imagenURL = tempCanvas.toDataURL('image/png', 1.0);
-      
-      // Pre-cargar una imagen para verificar que el fondo sea correcto
-      const img = new Image();
-      img.onload = function() {
-        const verifyCanvas = document.createElement('canvas');
-        verifyCanvas.width = img.width;
-        verifyCanvas.height = img.height;
-        const verifyCtx = verifyCanvas.getContext('2d');
-        verifyCtx.fillStyle = '#FFFFFF';
-        verifyCtx.fillRect(0, 0, verifyCanvas.width, verifyCanvas.height);
-        verifyCtx.drawImage(img, 0, 0);
-        
-        // Usar esta imagen verificada para la descarga
-        enlace.href = verifyCanvas.toDataURL('image/png', 1.0);
-      };
-      img.src = imagenURL;
-      
-      // Limpiar cualquier evento previo para evitar duplicados
-      enlace.onclick = null;
-      
-      // Para móviles - usar un enfoque más directo para la descarga
-      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-        // En móviles, simplificamos el proceso para que sea más inmediato
-        enlace.addEventListener('click', function() {
-          // Verificar URL antes de descargar
-          this.href = canvas.toDataURL('image/png', 1.0);
-          
-          // Enviar notificación inmediatamente
-          const textoPatente = document.getElementById('texto').value;
-          enviarNotificacionInmediata(textoPatente, "descargada");
-          
-          return true;
-        });
-      } else {
-        // En computadoras, también hacemos el proceso inmediato
-        enlace.addEventListener('click', function() {
-          // Actualizar URL antes de descargar
-          this.href = canvas.toDataURL('image/png', 1.0);
-          
-          // Enviar notificación a Discord inmediatamente
-          const textoPatente = document.getElementById('texto').value;
-          enviarNotificacionInmediata(textoPatente, "descargada");
-          
-          // Permitir que la descarga continúe normalmente
-          return true;
-        });
-      }
-    }
-
-    function revertirImagen() {
-      const canvas = document.getElementById('canvas');
-      const ctx = canvas.getContext('2d');
-      const factorEscala = 4; // Usar el mismo factor de escala que en generarImagen
-
-      if (imagenGenerada) {
-        const img = new Image();
-        img.src = imagenGenerada;
-        img.onload = function () {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-          // Invertir la imagen en el eje horizontal (efecto espejo)
-          ctx.save();
-          ctx.scale(-factorEscala, factorEscala); // Escalar con el factor y mantener la inversión
-          ctx.drawImage(img, -canvas.width/factorEscala, 0, canvas.width/factorEscala, canvas.height/factorEscala); // Ajustar para la escala
-          ctx.restore();
-          
-          // Guardar la nueva versión invertida
-          imagenGenerada = canvas.toDataURL('image/png', 1.0);
-          
-          // Actualizar el enlace de descarga después de cambiar la imagen
-          configurarEnlaceDescarga();
-        };
-      }
-
-      // Ocultar el botón de revertir
-      document.getElementById('revertirBtn').classList.add('hidden');
-    }
-
-    function renderHistorial() {
-      const tabla = document.getElementById('historialTabla');
-      tabla.innerHTML = '<tr><th>Usuario</th><th>Texto</th><th>Fecha</th><th>Hora</th><th>Tipo</th></tr>';
-      historial.forEach(item => {
-        const tipo = item.tipo || "imagen";
-        const fila = `<tr><td>${item.usuario}</td><td>${item.texto}</td><td>${item.fecha}</td><td>${item.hora}</td><td>${tipo}</td></tr>`;
-        tabla.innerHTML += fila;
-      });
-    }
-    
-    // Nueva función para envío inmediato de notificaciones con tipo de acción
-    function enviarNotificacionInmediata(textoPatente, accion = "descargada") {
-      // Usar el usuario actual o 'Anónimo' si no hay sesión iniciada
-      const usuario = usuarioActual || 'Anónimo';
-      
-      // Crear el mensaje para Discord - Formato simple para mayor compatibilidad
-      const mensaje = {
-        content: `¡Nueva patente ${accion}! Usuario: ${usuario}, Texto: ${textoPatente}, Fecha: ${new Date().toLocaleString()}`
-      };
-      
-      // Si no hay conexión, añadir a la cola
-      if (!navigator.onLine) {
-        agregarMensajeACola(mensaje);
-        mostrarNotificacion("Sin conexión. Notificación guardada para envío posterior.");
-        return;
-      }
-      
-      // Mostrar mensaje de "enviando..."
-      mostrarNotificacion("Enviando notificación...");
-      
-      // Enviar directamente sin delay
-      const opciones = {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(mensaje)
-      };
-      
-      fetch(DISCORD_WEBHOOK_URL, opciones)
-        .then(response => {
-          if (response.ok) {
-            mostrarNotificacion("¡Notificación enviada correctamente!");
-            return;
-          }
-          throw new Error("Error al enviar notificación");
-        })
-        .catch(error => {
-          // Si falla, intentar con proxy sin delay
-          const PROXY_URL = "https://corsproxy.io/?url=";
-          fetch(PROXY_URL + encodeURIComponent(DISCORD_WEBHOOK_URL), opciones)
-            .then(response => {
-              if (response.ok) {
-                mostrarNotificacion("¡Notificación enviada correctamente!");
-                return;
-              }
-              throw new Error("Error al enviar notificación con proxy");
-            })
-            .catch(err => {
-              // Si ambos métodos fallan, agregar a la cola
-              agregarMensajeACola(mensaje);
-              mostrarNotificacion("No se pudo enviar la notificación ahora. Se intentará más tarde.");
-            });
-        });
-    }
-    
-    // Función para agregar un mensaje a la cola
-    function agregarMensajeACola(mensaje) {
-      colaMensajes.push({
-        mensaje: mensaje,
-        timestamp: new Date().getTime()
-      });
-      guardarColaMensajes();
-      actualizarEstadoCola();
-    }
-    
-    // Función para procesar la cola de mensajes
-    function procesarColaMensajes(manual = false) {
-      // Si ya estamos procesando o no hay mensajes, salir
-      if (revisandoCola || colaMensajes.length === 0) return;
-      
-      // Si no hay conexión, salir
-      if (!navigator.onLine) {
-        if (manual) {
-          mostrarError("No hay conexión a internet. Inténtalo más tarde.");
-        }
-        return;
-      }
-      
-      revisandoCola = true;
-      
-      if (manual) {
-        mostrarNotificacion("Enviando notificaciones pendientes...");
-      }
-      
-      // Tomar el primer mensaje de la cola
-      const item = colaMensajes[0];
-      
-      // Opciones para el envío
-      const opciones = {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(item.mensaje)
-      };
-      
-      // Intentar enviar el mensaje
-      fetch(DISCORD_WEBHOOK_URL, opciones)
-        .then(response => {
-          if (response.ok) {
-            // Si el envío fue exitoso, eliminar de la cola
-            colaMensajes.shift();
-            guardarColaMensajes();
-            
-            if (manual) {
-              mostrarNotificacion(`Notificación enviada (quedan ${colaMensajes.length})`);
-            }
-            
-            // Si hay más mensajes, procesar el siguiente inmediatamente
-            if (colaMensajes.length > 0) {
-              revisandoCola = false;
-              procesarColaMensajes(manual);
-            } else {
-              revisandoCola = false;
-              if (manual) {
-                mostrarNotificacion("Todas las notificaciones pendientes enviadas");
-              }
-            }
-          } else {
-            // Si hubo un error, intentar con proxy
-            throw new Error("Error al enviar");
-          }
-        })
-        .catch(error => {
-          // Probar con proxy inmediatamente
-          const PROXY_URL = "https://corsproxy.io/?url=";
-          fetch(PROXY_URL + encodeURIComponent(DISCORD_WEBHOOK_URL), opciones)
-            .then(response => {
-              if (response.ok) {
-                // Si el envío fue exitoso, eliminar de la cola
-                colaMensajes.shift();
-                guardarColaMensajes();
-                
-                if (manual) {
-                  mostrarNotificacion(`Notificación enviada (quedan ${colaMensajes.length})`);
-                }
-              } else {
-                if (manual) {
-                  mostrarError("No se pudo enviar la notificación.");
-                }
-              }
-              
-              // Terminar el procesamiento actual
-              revisandoCola = false;
-              
-              // Si hay más mensajes, procesar el siguiente inmediatamente
-              if (colaMensajes.length > 0 && response.ok) {
-                procesarColaMensajes(manual);
-              }
-            })
-            .catch(error => {
-              revisandoCola = false;
-              if (manual) {
-                mostrarError("No se pudo enviar la notificación.");
-              }
-            });
-        });
     }
     
     // Función para mostrar notificación en la interfaz
@@ -1216,13 +699,6 @@
         console.error("Error (silencioso): " + mensaje);
       }
     }
-    
-    // Verificar cola periódicamente incluso si la página está en segundo plano
-    setInterval(function() {
-      if (document.visibilityState === 'hidden') {
-        verificarColaPendiente();
-      }
-    }, 300000); // Cada 5 minutos si la página está en segundo plano
   </script>
 </body>
 </html>
