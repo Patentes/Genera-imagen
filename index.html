@@ -599,16 +599,23 @@
 
       if (usuarioActual === 'admin') renderHistorial();
       
-      // Optimizado para usar window.print() nativo pero con imagen
+      // Obtener el tamaño del texto actual
+      const tamanioTexto = document.getElementById('tamanioTexto').value;
+      
       try {
         console.log("Usando window.print() nativo con la imagen del canvas");
         
+        // MODIFICACIÓN: Usar la imagen actual del canvas, ya sea normal o revertida
         const canvas = document.getElementById('canvas');
         
         // Guardar el contenido original
         const contenidoOriginal = document.body.innerHTML;
         
-        // Configurar una página temporal para impresión - Peso ligero
+        // MODIFICACIÓN: Crear una imagen a partir del canvas actual
+        const imgDataUrl = canvas.toDataURL('image/png');
+        
+        // Configurar una página temporal para impresión
+        // MODIFICACIÓN: Usar una imagen en lugar de texto y establecer el tamaño según el valor actual
         const contenidoImpresion = `
           <html>
           <head>
@@ -621,17 +628,27 @@
                 margin: 0;
                 padding: 0;
                 text-align: center;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
               }
-              .texto-grande {
+              .texto-impresion {
                 font-family: Arial, sans-serif;
-                font-size: 36pt;
-                font-weight: 300; /* Peso light para que se vea como en la imagen */
+                font-size: ${tamanioTexto}pt; /* MODIFICACIÓN: Usar el tamaño actual */
+                font-weight: 300;
                 margin: 20px 0;
+              }
+              /* MODIFICACIÓN: Para usar la imagen del canvas */
+              .imagen-impresion {
+                max-width: 90%;
+                height: auto;
               }
             </style>
           </head>
           <body>
-            <div class="texto-grande">${texto}</div>
+            <!-- MODIFICACIÓN: Usar la imagen actual del canvas -->
+            <img src="${imgDataUrl}" alt="${texto}" class="imagen-impresion">
           </body>
           </html>
         `;
@@ -667,45 +684,44 @@
         
         // Si el método principal falla, intentar un método alternativo
         try {
-          // Usar print directo
-          if (typeof window.print === 'function') {
-            // Crear un elemento oculto con solo el texto - peso ligero
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = `<div style="text-align:center; font-size:36pt; font-weight:300;">${texto}</div>`;
-            tempDiv.style.display = 'none';
-            document.body.appendChild(tempDiv);
-            
-            // Guardar los elementos visibles y ocultar todo excepto el texto a imprimir
-            const elemVisibilidad = [];
-            document.body.childNodes.forEach(function(node) {
-              if (node.style) {
-                elemVisibilidad.push({
-                  elem: node,
-                  vis: node.style.display
-                });
-                node.style.display = 'none';
-              }
-            });
-            
-            // Mostrar solo el texto a imprimir
-            tempDiv.style.display = 'block';
-            
-            // Imprimir
-            window.print();
-            
-            // Restaurar visibilidad
-            elemVisibilidad.forEach(function(item) {
-              item.elem.style.display = item.vis;
-            });
-            
-            // Eliminar el div temporal
-            document.body.removeChild(tempDiv);
-            
-            mostrarNotificacion("Impresión completada");
-            enviarNotificacionInmediata(texto, "impresa");
-          } else {
-            throw new Error("window.print no es una función");
-          }
+          // MODIFICACIÓN: Usar la imagen del canvas
+          const canvas = document.getElementById('canvas');
+          const imgDataUrl = canvas.toDataURL('image/png');
+          
+          // Crear un elemento oculto con la imagen
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = `<img src="${imgDataUrl}" alt="${texto}" style="max-width: 90%; height: auto;">`;
+          tempDiv.style.display = 'none';
+          document.body.appendChild(tempDiv);
+          
+          // Guardar los elementos visibles y ocultar todo excepto el texto a imprimir
+          const elemVisibilidad = [];
+          document.body.childNodes.forEach(function(node) {
+            if (node.style) {
+              elemVisibilidad.push({
+                elem: node,
+                vis: node.style.display
+              });
+              node.style.display = 'none';
+            }
+          });
+          
+          // Mostrar solo la imagen a imprimir
+          tempDiv.style.display = 'block';
+          
+          // Imprimir
+          window.print();
+          
+          // Restaurar visibilidad
+          elemVisibilidad.forEach(function(item) {
+            item.elem.style.display = item.vis;
+          });
+          
+          // Eliminar el div temporal
+          document.body.removeChild(tempDiv);
+          
+          mostrarNotificacion("Impresión completada");
+          enviarNotificacionInmediata(texto, "impresa");
         } catch (e2) {
           console.error("Error en método alternativo:", e2);
           mostrarError("No se pudo imprimir");
