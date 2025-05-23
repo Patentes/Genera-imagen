@@ -1,5 +1,5 @@
 // Service Worker para enviar notificaciones en segundo plano
-const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1364802693012521000/MBUF565wKk7lV_xJgy5e4JqNCOI-PYOCUm1E3VxuJt9DWQ8StrXVrQGK8IOmIa0tmfz9";
+const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1375292621580406896/9MNF404t3_wsLTB56Dx7ZJEHd3UQQOxuyGXafxaGkfBXS98-PXyGYvihhERvHhRBjQEj";
 
 // Instalar el Service Worker
 self.addEventListener('install', event => {
